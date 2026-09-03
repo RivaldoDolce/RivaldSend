@@ -46,6 +46,28 @@ const resources = {
       enterIp: "Or enter IP / port manually",
     },
   },
+  es: {
+    translation: {
+      dropTitle: "Suelta los archivos aquí",
+      dropSubtitle: "o haz clic para explorar",
+      selectFiles: "Seleccionar archivos",
+      peers: "Dispositivos cercanos",
+      noPeers: "No se encontraron dispositivos",
+      noPeersDesc: "Asegúrate de que ambos dispositivos estén en la misma red Wi-Fi",
+      send: "Enviar",
+      history: "Historial",
+      settings: "Ajustes",
+      transfer: "Transferencia",
+      pairing: "Emparejamiento",
+      downloadDir: "Carpeta de descargas",
+      network: "Red",
+      darkMode: "Modo oscuro",
+      language: "Idioma",
+      pairingCode: "Código de emparejamiento",
+      scanQr: "Escanear código QR",
+      enterIp: "O introduce IP / puerto manualmente",
+    },
+  },
 };
 
 void i18n.use(initReactI18next).init({
