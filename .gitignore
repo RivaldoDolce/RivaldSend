@@ -1,6 +1,5 @@
 Guides/*
 !Guides/CONVENTION-GITHUB.md
-
 /target
 /dist
 /node_modules
