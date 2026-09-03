@@ -1,0 +1,21 @@
+{
+  "identifier": "default",
+  "description": "Capabilities par défaut RivaldSend",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default",
+    "core:app:default",
+    "core:resources:default",
+    "core:menu:default",
+    "core:tray:default",
+    "dialog:allow-open",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "shell:allow-open",
+    "notification:default",
+    "os:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text"
+  ]
+}
