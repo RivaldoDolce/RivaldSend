@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #FAFAFA;
+  --surface: #FFFFFF;
+  --surface-hover: #F5F5F5;
+  --border: #E5E5E5;
+  --text-primary: #0A0A0A;
+  --text-secondary: #737373;
+  --accent: #0066FF;
+  --accent-hover: #0052CC;
+  --accent-light: #E8F0FF;
+  --success: #00A86B;
+  --warning: #FF8800;
+  --error: #E63946;
+  --info: #0066FF;
+}
+
+.dark {
+  --background: #0A0A0A;
+  --surface: #1A1A1A;
+  --surface-hover: #252525;
+  --border: #2A2A2A;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A3A3A3;
+  --accent: #3D8BFF;
+  --accent-hover: #5A9FFF;
+  --accent-light: #1A2A4A;
+}
+
+* { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+.rivaldsend-dropzone {
+  border: 2px dashed var(--border);
+  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rivaldsend-dropzone-active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}

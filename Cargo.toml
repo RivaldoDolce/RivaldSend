@@ -8,7 +8,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["RivaldSend contributors"]
 repository = "https://github.com/rivaldsend/rivaldsend"
-rust-version = "1.81.0"
+rust-version = "1.85.0"
 
 [workspace.dependencies]
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "time", "sync", "signal"] }

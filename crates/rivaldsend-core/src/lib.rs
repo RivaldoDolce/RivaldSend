@@ -1,0 +1,11 @@
+pub mod error;
+pub mod pipeline;
+pub mod resume;
+pub mod history;
+pub mod pairing;
+pub mod hooks;
+pub mod manager;
+pub mod queue;
+pub use error::CoreError;
+pub use manager::TransferManager;
+pub use hooks::{PlatformHooks, NoopHooks};
