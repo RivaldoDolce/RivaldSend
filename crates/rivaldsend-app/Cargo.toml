@@ -29,4 +29,4 @@ blake3 = { workspace = true }
 bytes = { workspace = true }
 
 [build-dependencies]
-tauri-build = "2.4"
+tauri-build = { version = "2.4", features = [] }
