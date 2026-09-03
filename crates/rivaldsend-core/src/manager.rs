@@ -19,7 +19,7 @@ impl TransferManager {
     pub async fn enqueue(&self, path: std::path::PathBuf) -> Uuid {
         let id = Uuid::new_v4();
         let mut q = self.queue.lock().await;
-        q.push(QueuedTransfer { id, path });
+        q.push(QueuedTransfer { id, path, priority: 0 });
         let mut s = self.statuses.lock().await;
         s.insert(id, TransferStatus::Queued);
         id
