@@ -21,6 +21,7 @@ subtle = "2.5"
 keyring = "2.3"
 mdns-sd = "0.11"
 if-addrs = "0.13"
+nix = { version = "0.27", features = ["fs"] }
 
 [dev-dependencies]
 tokio = { workspace = true }

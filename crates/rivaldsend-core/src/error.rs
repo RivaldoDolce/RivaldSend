@@ -17,4 +17,6 @@ pub enum CoreError {
     Pairing(String),
     #[error("queue full")]
     QueueFull,
+    #[error("io string: {0}")]
+    IoString(String),
 }

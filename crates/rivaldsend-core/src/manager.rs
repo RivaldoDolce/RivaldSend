@@ -40,4 +40,37 @@ impl TransferManager {
     pub async fn status(&self, id: &Uuid) -> Option<TransferStatus> {
         self.statuses.lock().await.get(id).cloned()
     }
+    pub async fn cancel(&self, id: Uuid) -> Result<(), CoreError> {
+        let mut s = self.statuses.lock().await;
+        if s.remove(&id).is_none() {
+            return Err(CoreError::NotFound(id.to_string()));
+        }
+        s.insert(id, TransferStatus::Failed("cancelled".into()));
+        let path = self.resume_dir.join(format!("{id}.json"));
+        let _ = tokio::fs::remove_file(&path).await;
+        let partial_dir = std::path::PathBuf::from(format!("/tmp/rivaldsend-partial/{id}"));
+        let _ = tokio::fs::remove_dir_all(&partial_dir).await;
+        Ok(())
+    }
+    pub async fn cleanup_stale(&self, max_age_days: u64) -> Result<usize, CoreError> {
+        let mut removed = 0;
+        let mut dir = match tokio::fs::read_dir(&self.resume_dir).await {
+            Ok(d) => d,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e.into()),
+        };
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(max_age_days as i64);
+        while let Some(entry) = dir.next_entry().await? {
+            let path = entry.path();
+            if let Ok(state) = crate::resume::load(&path).await {
+                if let Some(s) = state {
+                    if s.last_updated < cutoff {
+                        let _ = tokio::fs::remove_file(&path).await;
+                        removed += 1;
+                    }
+                }
+            }
+        }
+        Ok(removed)
+    }
 }
