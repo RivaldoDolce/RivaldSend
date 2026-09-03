@@ -28,6 +28,7 @@ reqwest = { workspace = true }
 blake3 = { workspace = true }
 bytes = { workspace = true }
 qrcode = { version = "0.14", features = ["svg"] }
+dirs = "5.0"
 
 [build-dependencies]
 tauri-build = { version = "2.4", features = [] }
