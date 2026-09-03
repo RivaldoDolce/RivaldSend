@@ -32,6 +32,12 @@ async fn resume_transfer(State(s): State<AppState>, Path(id): Path<String>) -> R
 async fn complete_transfer(Path(id): Path<String>, Json(_body): Json<serde_json::Value>) -> Json<serde_json::Value> {
     Json(serde_json::json!({"transfer_id": id, "status":"completed"}))
 }
+async fn cancel_transfer(State(s): State<AppState>, Path(id): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let uuid = id.parse::<uuid::Uuid>().map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    s.manager.cancel(uuid).await.map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
+    Ok(Json(serde_json::json!({"transfer_id": uuid, "status":"cancelled"})))
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health))
@@ -40,6 +46,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/transfers/:id/chunks", put(put_chunk))
         .route("/v1/transfers/:id/resume", post(resume_transfer))
         .route("/v1/transfers/:id/complete", post(complete_transfer))
-        .layer(ServiceBuilder::new().layer(RequestBodyLimitLayer::new(32 * 1024 * 1024)).layer(tower_http::trace::TraceLayer::new_for_http()))
+        .route("/v1/transfers/:id", axum::routing::delete(cancel_transfer))
+        .layer(ServiceBuilder::new().layer(RequestBodyLimitLayer::new(32 * 1024 * 1024)).layer(tower::limit::ConcurrencyLimitLayer::new(50)).layer(tower_http::trace::TraceLayer::new_for_http()))
         .with_state(state)
 }

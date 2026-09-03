@@ -1,0 +1,6 @@
+{
+  "name": "redemarrage_envoyeur",
+  "toxic": { "type": "latency", "latency": 100 },
+  "expect": "reprise_ok",
+  "blake3_verified": true
+}

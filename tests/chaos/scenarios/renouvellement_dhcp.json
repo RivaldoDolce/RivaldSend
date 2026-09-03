@@ -1,0 +1,6 @@
+{
+  "name": "renouvellement_dhcp",
+  "toxic": { "type": "latency", "latency": 100 },
+  "expect": "reprise_ok",
+  "blake3_verified": true
+}

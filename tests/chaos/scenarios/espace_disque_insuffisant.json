@@ -1,0 +1,6 @@
+{
+  "name": "espace_disque_insuffisant",
+  "toxic": { "type": "latency", "latency": 100 },
+  "expect": "reprise_ok",
+  "blake3_verified": true
+}
