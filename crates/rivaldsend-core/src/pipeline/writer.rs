@@ -1,7 +1,7 @@
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 pub async fn write_chunk(path: &Path, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
-    let mut file = tokio::fs::OpenOptions::new().create(true).write(true).open(path).await?;
+    let mut file = tokio::fs::OpenOptions::new().create(true).write(true).truncate(false).open(path).await?;
     file.seek(std::io::SeekFrom::Start(offset)).await?;
     file.write_all(data).await?;
     file.sync_data().await?;

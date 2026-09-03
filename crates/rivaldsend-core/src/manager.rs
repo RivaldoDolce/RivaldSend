@@ -14,7 +14,7 @@ pub struct TransferManager {
 }
 impl TransferManager {
     pub fn new(resume_dir: std::path::PathBuf) -> Self {
-        Self { queue: tokio::sync::Mutex::new(Queue::new()), statuses: tokio::sync::Mutex::new(HashMap::new()), semaphore: Arc::new(Semaphore::new(2)), resume_dir: resume_dir }
+        Self { queue: tokio::sync::Mutex::new(Queue::new()), statuses: tokio::sync::Mutex::new(HashMap::new()), semaphore: Arc::new(Semaphore::new(2)), resume_dir }
     }
     pub async fn enqueue(&self, path: std::path::PathBuf) -> Uuid {
         let id = Uuid::new_v4();
