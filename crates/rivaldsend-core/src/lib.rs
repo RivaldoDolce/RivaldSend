@@ -12,3 +12,4 @@ pub mod firewall;
 pub use error::CoreError;
 pub use manager::TransferManager;
 pub use hooks::{PlatformHooks, NoopHooks};
+pub mod ios;
