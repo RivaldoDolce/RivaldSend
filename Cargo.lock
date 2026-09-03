@@ -3870,6 +3870,7 @@ dependencies = [
  "axum",
  "blake3",
  "bytes",
+ "qrcode",
  "reqwest 0.12.28",
  "rivaldsend-core",
  "rivaldsend-proto",

@@ -27,6 +27,7 @@ tauri-plugin-os = "2.2"
 reqwest = { workspace = true }
 blake3 = { workspace = true }
 bytes = { workspace = true }
+qrcode = { version = "0.14", features = ["svg"] }
 
 [build-dependencies]
 tauri-build = { version = "2.4", features = [] }
