@@ -5,6 +5,8 @@ import {
   onTransferProgress,
   onTransferCompleted,
   onIncomingRequest,
+  notifyTransferComplete,
+  formatBytes,
   type TransferProgressEvent,
   type PeerDiscoveredEvent,
   type IncomingRequestEvent,
@@ -13,6 +15,7 @@ import { usePeersStore } from "../stores/usePeersStore";
 import { useTransfersStore } from "../stores/useTransfersStore";
 import { useHistoryStore } from "../stores/useHistoryStore";
 import { useIncomingStore } from "../stores/useIncomingStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
 import type { Peer } from "../types";
 
 export function useTauriEvents() {
@@ -50,22 +53,30 @@ export function useTauriEvents() {
     );
 
     unlisteners.push(
-      onTransferCompleted(({ transferId, direction }) => {
+      onTransferCompleted(async ({ transferId, direction }) => {
         const t = useTransfersStore.getState().transfers.find(
           (x) => x.id === transferId
         );
-        if (t) {
-          const peer = usePeersStore
-            .getState()
-            .peers.find((p) => p.id === t.peerId);
-          addEntry({
-            id: transferId,
-            peerName: peer?.name ?? "Inconnu",
-            fileName: t.files[0]?.path ?? "",
-            size: t.totalBytes,
-            direction,
-            completedAt: new Date().toISOString(),
-            status: "success",
+        if (!t) return;
+
+        const peer = usePeersStore
+          .getState()
+          .peers.find((p) => p.id === t.peerId);
+        addEntry({
+          id: transferId,
+          peerName: peer?.name ?? "Inconnu",
+          fileName: t.files[0]?.path ?? "",
+          size: t.totalBytes,
+          direction,
+          completedAt: new Date().toISOString(),
+          status: "success",
+        });
+
+        if (useSettingsStore.getState().notifications) {
+          await notifyTransferComplete({
+            title:
+              direction === "received" ? "Fichier reçu" : "Envoi terminé",
+            body: `${t.files[0]?.path ?? "Fichier"} · ${formatBytes(t.totalBytes)}`,
           });
         }
       })

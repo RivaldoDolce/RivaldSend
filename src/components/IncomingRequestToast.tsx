@@ -25,7 +25,8 @@ export function IncomingRequestToast() {
       await acceptIncoming({ requestId: pending.requestId, targetDir: dir });
       toast.success("Transfert accepté", `${pending.peerName} envoie ${pending.files.length} fichier(s)`);
       clear();
-    } catch {
+    } catch (err) {
+      console.error("[IncomingRequest] accept failed:", err);
       toast.error("Erreur", "Impossible d'accepter le transfert");
     }
   };
@@ -37,7 +38,8 @@ export function IncomingRequestToast() {
       await acceptIncoming({ requestId: pending.requestId, targetDir: dir });
       toast.success("Transfert accepté", `Dossier : ${dir}`);
       clear();
-    } catch {
+    } catch (err) {
+      console.error("[IncomingRequest] accept with custom dir failed:", err);
       toast.error("Erreur", "Impossible d'accepter le transfert");
     }
   };
@@ -46,8 +48,8 @@ export function IncomingRequestToast() {
     try {
       await rejectIncoming(pending.requestId);
       toast.info("Transfert refusé");
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("[IncomingRequest] reject failed:", err);
     }
     clear();
   };
@@ -67,6 +69,7 @@ export function IncomingRequestToast() {
           </div>
           <button
             onClick={handleReject}
+            aria-label="Refuser le transfert"
             className="shrink-0 rounded-full p-1 hover:bg-[var(--surface-hover)]"
           >
             <X className="h-4 w-4 text-[var(--text-tertiary)]" />

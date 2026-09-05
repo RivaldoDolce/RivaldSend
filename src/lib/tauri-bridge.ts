@@ -149,6 +149,31 @@ export function onTransferCompleted(
   );
 }
 
+// ============ SYSTEM NOTIFICATIONS ============
+
+export async function notifyTransferComplete(params: {
+  title: string;
+  body: string;
+}): Promise<void> {
+  try {
+    const {
+      isPermissionGranted,
+      requestPermission,
+      sendNotification,
+    } = await import("@tauri-apps/plugin-notification");
+
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      granted = (await requestPermission()) === "granted";
+    }
+    if (!granted) return;
+
+    sendNotification({ title: params.title, body: params.body });
+  } catch (err) {
+    console.error("[notify] system notification failed:", err);
+  }
+}
+
 // ============ HELPERS ============
 
 export function formatBytes(n: number): string {

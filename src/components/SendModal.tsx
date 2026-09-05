@@ -1,7 +1,8 @@
 import { usePeersStore } from "../stores/usePeersStore";
 import { useTransfersStore } from "../stores/useTransfersStore";
+import { useNavStore } from "../stores/useNavStore";
 import { useToast } from "./toast/Toast";
-import { MonitorSmartphone, Smartphone, X, Send } from "lucide-react";
+import { MonitorSmartphone, Smartphone, Users, X, Send, QrCode } from "lucide-react";
 import { startTransfer } from "../lib/tauri-bridge";
 
 export function SendModal() {
@@ -35,16 +36,21 @@ export function SendModal() {
     };
     addTransfer(transfer);
     closeSendModal();
-    toast.info("Transfert lancé", `Envoi vers ${selectedPeer.name}...`);
 
     try {
       await startTransfer({
         peerId: selectedPeer.id,
         filePaths: pendingFiles.map((f) => f.path),
       });
-    } catch {
-      useTransfersStore.getState().updateTransfer(transferId, { status: "failed" });
-      toast.error("Échec", "Impossible de démarrer le transfert");
+      toast.success("Transfert démarré", `Envoi vers ${selectedPeer.name}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : String(err ?? "Erreur inconnue");
+      console.error("[SendModal] startTransfer failed:", err);
+      useTransfersStore
+        .getState()
+        .updateTransfer(transferId, { status: "failed", error: message });
+      toast.error("Échec du démarrage", "Impossible de contacter l'appareil");
     }
   };
 
@@ -53,21 +59,40 @@ export function SendModal() {
       <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl animate-scale-in">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Envoyer à…</h3>
-          <button onClick={closeSendModal} className="rounded-full p-1 hover:bg-[var(--surface-hover)]">
+          <button
+            onClick={closeSendModal}
+            aria-label="Fermer"
+            className="rounded-full p-1 hover:bg-[var(--surface-hover)]"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <p className="mt-2 text-xs text-[var(--text-secondary)]">
-          {pendingFiles.length} fichier(s) · {(totalSize / 1024 / 1024).toFixed(1)} Mo
+          {pendingFiles.length} fichier(s)
+          {totalSize > 0 ? ` · ${(totalSize / 1024 / 1024).toFixed(1)} Mo` : ""}
         </p>
 
         <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
-          {peers.length === 0 && (
-            <p className="text-center text-xs text-[var(--text-secondary)] py-4">
-              Aucun appareil découvert. Vérifiez que les deux appareils sont sur le même réseau.
-            </p>
-          )}
+          {peers.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-12 w-12 mx-auto text-[var(--text-tertiary)]" />
+              <p className="mt-4 text-sm font-medium">Aucun appareil trouvé</p>
+              <p className="mt-2 text-xs text-[var(--text-secondary)] max-w-xs mx-auto leading-relaxed">
+                Assurez-vous que l&apos;autre appareil a RivaldSend ouvert et
+                est sur le même réseau.
+              </p>
+              <button
+                onClick={() => {
+                  closeSendModal();
+                  useNavStore.getState().setView("pairing");
+                }}
+                className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-5 py-2 text-xs font-semibold text-white hover:bg-[var(--accent-hover)]"
+              >
+                <QrCode className="h-4 w-4" /> Scanner un QR code
+              </button>
+            </div>
+          ) : null}
           {peers.map((p) => {
             const active = selectedPeerId === p.id;
             return (

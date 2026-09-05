@@ -16,6 +16,7 @@ import { usePeersStore } from "./stores/usePeersStore";
 import { useTransfersStore } from "./stores/useTransfersStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useTauriEvents } from "./hooks/useTauriEvents";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import "./i18n";
 
 const APP_VERSION = "0.3.0";
@@ -136,20 +137,22 @@ function AppInner() {
   const darkMode = useSettingsStore((s) => s.darkMode);
   const view = useNavStore((s) => s.view);
   const mobileTab = useNavStore((s) => s.mobileTab);
-  const openSendModal = usePeersStore((s) => s.selectedPeerId);
   const [hasFiles, setHasFiles] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem("rivaldsend-onboarded");
   });
 
   useTauriEvents();
+  useKeyboardShortcuts();
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
   useEffect(() => {
-    invoke<boolean>("check_firewall").catch(() => {});
+    invoke<string>("check_firewall").catch((err) => {
+      console.warn("[firewall] check unavailable:", err);
+    });
   }, []);
 
   const handleFiles = useCallback(

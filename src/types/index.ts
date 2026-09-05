@@ -27,6 +27,7 @@ export interface Transfer {
   status: "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
   peerId: string;
   createdAt: string;
+  error?: string;
 }
 
 export interface HistoryEntry {
