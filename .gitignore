@@ -1,5 +1,6 @@
-Guides/*
-!Guides/CONVENTION-GITHUB.md
+Guides/
+assets/wireframe/
+
 /target
 /dist
 /node_modules
