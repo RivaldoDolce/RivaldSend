@@ -24,7 +24,7 @@ export interface Transfer {
   bytesDone: number;
   speedBps: number;
   etaSecs: number;
-  status: "queued" | "running" | "paused" | "completed" | "failed";
+  status: "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
   peerId: string;
   createdAt: string;
 }

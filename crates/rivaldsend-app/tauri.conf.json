@@ -1,6 +1,6 @@
 {
   "productName": "RivaldSend",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "identifier": "app.rivaldsend",
   "build": {
     "beforeDevCommand": "pnpm dev",
