@@ -1,10 +1,12 @@
-import { MonitorSmartphone, Smartphone, ShieldCheck, ShieldAlert, Wifi, Search } from "lucide-react";
+import { MonitorSmartphone, Smartphone, ShieldCheck, ShieldAlert, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useAppStore } from "../stores/appStore";
+import { usePeersStore } from "../stores/usePeersStore";
 
 export function PeerList() {
   const { t } = useTranslation();
-  const { peers, selectedPeerId, selectPeer } = useAppStore();
+  const peers = usePeersStore((s) => s.peers);
+  const selectedPeerId = usePeersStore((s) => s.selectedPeerId);
+  const selectPeer = usePeersStore((s) => s.selectPeer);
 
   if (peers.length === 0) {
     return (
@@ -18,7 +20,7 @@ export function PeerList() {
         <p className="mt-4 text-sm font-semibold text-[var(--text-primary)]">{t("noPeers")}</p>
         <p className="mt-1 max-w-xs text-xs leading-relaxed text-[var(--text-secondary)]">{t("noPeersDesc")}</p>
         <div className="mt-4 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-          <Wifi className="h-3.5 w-3.5" /> mDNS + QR + IP manuelle
+          mDNS + QR + IP manuelle
         </div>
       </div>
     );
@@ -28,7 +30,6 @@ export function PeerList() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">{t("peers")} · {peers.length}</h3>
-        <span className="rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-600">LAN détecté</span>
       </div>
       <div className="grid gap-3">
         {peers.map((p) => {

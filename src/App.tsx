@@ -1,17 +1,28 @@
 import { useEffect, useState, useCallback, memo } from "react";
-import { Send, History, Settings, Shield, Sun, Moon, Zap, Home, Inbox, Wifi, MoreHorizontal } from "lucide-react";
+import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { DropZone } from "./components/DropZone";
 import { PeerList } from "./components/PeerList";
 import { ProgressView } from "./components/ProgressView";
 import { PairingView } from "./components/PairingView";
 import { HistoryView } from "./components/HistoryView";
 import { SettingsView } from "./components/SettingsView";
-import { useAppStore } from "./stores/appStore";
+import { SendModal } from "./components/SendModal";
+import { Onboarding } from "./components/Onboarding";
+import { IncomingRequestToast } from "./components/IncomingRequestToast";
+import { ToastProvider } from "./components/toast/Toast";
+import { useNavStore } from "./stores/useNavStore";
+import { usePeersStore } from "./stores/usePeersStore";
+import { useTransfersStore } from "./stores/useTransfersStore";
+import { useSettingsStore } from "./stores/useSettingsStore";
+import { useTauriEvents } from "./hooks/useTauriEvents";
 import "./i18n";
 
+const APP_VERSION = "0.3.0";
+
 const SidebarNav = memo(function SidebarNav() {
-  const view = useAppStore((s) => s.view);
-  const setView = useAppStore((s) => s.setView);
+  const view = useNavStore((s) => s.view);
+  const setView = useNavStore((s) => s.setView);
   const items = [
     { id: "transfer", label: "Transfert", icon: Send },
     { id: "pairing", label: "Appairage", icon: Shield },
@@ -33,18 +44,13 @@ const SidebarNav = memo(function SidebarNav() {
           </button>
         );
       })}
-      <div className="mx-1 my-2 h-px bg-[var(--border)]" />
-      <div className="rounded-[14px] bg-gradient-to-br from-blue-600 to-indigo-600 p-3 text-white">
-        <p className="text-xs font-bold">3 panes desktop</p>
-        <p className="mt-1 text-xs leading-relaxed text-white/80">Appareils · Zone centrale · Détails</p>
-      </div>
     </nav>
   );
 });
 
 const MobileBottomNav = memo(function MobileBottomNav() {
-  const mobileTab = useAppStore((s) => s.mobileTab);
-  const setMobileTab = useAppStore((s) => s.setMobileTab);
+  const mobileTab = useNavStore((s) => s.mobileTab);
+  const setMobileTab = useNavStore((s) => s.setMobileTab);
   const tabs = [
     { id: "home", label: "Accueil", icon: Home },
     { id: "send", label: "Envoyer", icon: Send },
@@ -74,8 +80,8 @@ const TransferThreePane = memo(function TransferThreePane({
   onFiles: (f: File[]) => void;
   hasFiles: boolean;
 }) {
-  const selectedTransferId = useAppStore((s) => s.selectedTransferId);
-  const transfers = useAppStore((s) => s.transfers);
+  const selectedTransferId = useTransfersStore((s) => s.selectedTransferId);
+  const transfers = useTransfersStore((s) => s.transfers);
   const selected = transfers.find((t) => t.id === selectedTransferId);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_320px] gap-6">
@@ -83,9 +89,6 @@ const TransferThreePane = memo(function TransferThreePane({
         <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center justify-between px-2 py-1">
             <h2 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">Appareils</h2>
-            <span className="flex items-center gap-1 text-xs text-emerald-600">
-              <Wifi className="h-3 w-3" /> mDNS
-            </span>
           </div>
           <div className="mt-3">
             <PeerList />
@@ -109,7 +112,6 @@ const TransferThreePane = memo(function TransferThreePane({
             <>
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold">Détails</h3>
-                <button className="rounded-full p-1 hover:bg-[var(--surface-hover)]"><MoreHorizontal className="h-4 w-4" /></button>
               </div>
               <p className="mono mt-2 text-xs break-all">{selected.files[0]?.path}</p>
               <div className="mt-3 space-y-2 text-xs">
@@ -130,41 +132,42 @@ const TransferThreePane = memo(function TransferThreePane({
   );
 });
 
-export default function App() {
-  const darkMode = useAppStore((s) => s.darkMode);
-  const toggleDarkMode = useAppStore((s) => s.toggleDarkMode);
-  const view = useAppStore((s) => s.view);
-  const mobileTab = useAppStore((s) => s.mobileTab);
-  const setTransfers = useAppStore((s) => s.setTransfers);
-  const transfers = useAppStore((s) => s.transfers);
+function AppInner() {
+  const darkMode = useSettingsStore((s) => s.darkMode);
+  const view = useNavStore((s) => s.view);
+  const mobileTab = useNavStore((s) => s.mobileTab);
+  const openSendModal = usePeersStore((s) => s.selectedPeerId);
   const [hasFiles, setHasFiles] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem("rivaldsend-onboarded");
+  });
+
+  useTauriEvents();
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
+  useEffect(() => {
+    invoke<boolean>("check_firewall").catch(() => {});
+  }, []);
+
   const handleFiles = useCallback(
     (files: File[]) => {
-      setHasFiles(files.length > 0);
-      const total = files.reduce((s, f) => s + f.size, 0);
-      const next = {
-        id: crypto.randomUUID(),
-        files: files.map((f) => ({ path: f.name, size: f.size, blake3: "0".repeat(64) })),
-        totalBytes: total,
-        bytesDone: 0,
-        speedBps: 0,
-        etaSecs: 0,
-        status: "queued" as const,
-        peerId: "1",
-        createdAt: new Date().toISOString(),
-      };
-      setTransfers([...transfers, next]);
-      setTimeout(() => {
-        setTransfers([{ ...next, status: "running", bytesDone: Math.floor(total * 0.42), speedBps: 85000000, etaSecs: 4 }]);
-      }, 400);
+      setHasFiles(true);
+      usePeersStore.getState().openSendModal(files.map((f) => ({ path: f.name, size: f.size })));
     },
-    [transfers, setTransfers]
+    []
   );
+
+  const handleOnboardingComplete = useCallback(() => {
+    localStorage.setItem("rivaldsend-onboarded", "1");
+    setShowOnboarding(false);
+  }, []);
+
+  if (showOnboarding) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] antialiased">
@@ -176,13 +179,21 @@ export default function App() {
               <p className="text-[15px] font-extrabold tracking-tight leading-none">RivaldSend</p>
               <p className="hidden sm:block text-xs font-medium text-[var(--text-secondary)]">Pro · Réactive</p>
             </div>
-            <span className="ml-2 hidden lg:inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] px-3 py-1 text-xs font-bold text-white">
-              <Zap className="h-3 w-3" /> Fluide
-            </span>
           </div>
-          <button onClick={toggleDarkMode} aria-label="Thème" className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] transition-colors">
-            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                localStorage.removeItem("rivaldsend-onboarded");
+                setShowOnboarding(true);
+              }}
+              className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+            >
+              Aide
+            </button>
+            <button onClick={useSettingsStore.getState().toggleDarkMode} aria-label="Thème" className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] transition-colors">
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -199,17 +210,27 @@ export default function App() {
 
         <div className="lg:hidden space-y-4 pb-20">
           {mobileTab === "home" && <TransferThreePane onFiles={handleFiles} hasFiles={hasFiles} />}
-          {mobileTab === "send" && <div className="fade-in"><HistoryView /></div>}
-          {mobileTab === "received" && <div className="fade-in"><HistoryView /></div>}
+          {mobileTab === "send" && <div className="fade-in"><HistoryView direction="sent" /></div>}
+          {mobileTab === "received" && <div className="fade-in"><HistoryView direction="received" /></div>}
           {mobileTab === "settings" && <div className="fade-in"><SettingsView /></div>}
         </div>
       </div>
 
       <MobileBottomNav />
+      <SendModal />
+      <IncomingRequestToast />
 
       <footer className="hidden lg:block border-t border-[var(--border)] py-4 text-center text-xs text-[var(--text-tertiary)]">
-        RivaldSend v0.1.0 · Sidebar desktop · Bottom nav mobile uniquement · Réactive 60fps
+        RivaldSend v{APP_VERSION}
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
   );
 }

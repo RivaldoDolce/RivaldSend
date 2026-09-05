@@ -1,5 +1,5 @@
 import { Zap, Clock3, HardDrive } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
+import { useTransfersStore } from "../stores/useTransfersStore";
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} o`;
@@ -9,11 +9,11 @@ function formatBytes(n: number): string {
 }
 
 export function ProgressView() {
-  const { transfers } = useAppStore();
+  const transfers = useTransfersStore((s) => s.transfers);
   if (transfers.length === 0) return null;
   return (
     <div className="space-y-3 fade-in">
-      <h3 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">Transferts en cours · 4 Hz IPC</h3>
+      <h3 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">Transferts en cours</h3>
       {transfers.map((tr) => {
         const pct = tr.totalBytes > 0 ? (tr.bytesDone / tr.totalBytes) * 100 : 0;
         return (
