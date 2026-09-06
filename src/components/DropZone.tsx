@@ -38,7 +38,7 @@ export function DropZone({ onFilesSelected }: Props) {
       onDrop={handleDrop}
       className={`rivaldsend-dropzone group relative overflow-hidden rounded-[24px] p-8 sm:p-10 ${dragging ? "rivaldsend-dropzone-active" : ""}`}
     >
-      <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]" style={{ backgroundImage: `url(/assets/Images/concept-transfer.png)`, backgroundSize: `280px`, backgroundRepeat: `no-repeat`, backgroundPosition: `right -20px center` }} />
+      <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]" style={{ backgroundImage: `url(/assets/Images/concept-transfer.png)`, backgroundSize: `280px`, backgroundRepeat: `no-repeat`, backgroundPosition: `right -20px center` }} aria-hidden="true" />
       <div className="relative flex flex-col items-center text-center">
         <div className="flex h-20 w-20 items-center justify-center rounded-[20px] bg-[var(--accent)] text-white shadow-lg shadow-blue-500/20 transition-transform group-hover:scale-105">
           <Upload className="h-9 w-9" strokeWidth={1.75} />

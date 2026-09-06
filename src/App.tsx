@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, memo } from "react";
-import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox } from "lucide-react";
+import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox, Wifi } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { DropZone } from "./components/DropZone";
 import { PeerList } from "./components/PeerList";
 import { ProgressView } from "./components/ProgressView";
 import { PairingView } from "./components/PairingView";
+import { DiscoveryView } from "./components/DiscoveryView";
 import { HistoryView } from "./components/HistoryView";
 import { SettingsView } from "./components/SettingsView";
 import { SendModal } from "./components/SendModal";
@@ -26,9 +27,10 @@ const SidebarNav = memo(function SidebarNav() {
   const setView = useNavStore((s) => s.setView);
   const items = [
     { id: "transfer", label: "Transfert", icon: Send },
+    { id: "discovery", label: "Decouverte", icon: Wifi },
     { id: "pairing", label: "Appairage", icon: Shield },
     { id: "history", label: "Historique", icon: History },
-    { id: "settings", label: "Paramètres", icon: Settings },
+    { id: "settings", label: "Parametres", icon: Settings },
   ] as const;
   return (
     <nav className="hidden lg:flex lg:flex-col gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-sm">
@@ -59,7 +61,7 @@ const MobileBottomNav = memo(function MobileBottomNav() {
     { id: "settings", label: "Param.", icon: Settings },
   ] as const;
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur">
+    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--surface)]/95 safe-area-bottom">
       <div className="mx-auto grid max-w-md grid-cols-4 gap-1 px-2 py-2">
         {tabs.map((t) => {
           const active = mobileTab === t.id;
@@ -174,10 +176,10 @@ function AppInner() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] antialiased">
-      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between px-4 sm:px-6 py-3.5">
           <div className="flex items-center gap-3">
-            <img src={darkMode ? "/assets/Images/symbol-on-dark.png" : "/assets/Images/symbol-on-light.png"} alt="RivaldSend" className="h-9 w-9 rounded-xl bg-white p-1.5 shadow-sm object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+            <img src={darkMode ? "/assets/Images/symbol-on-dark.png" : "/assets/Images/symbol-on-light.png"} alt="RivaldSend" width="36" height="36" decoding="async" className="h-9 w-9 rounded-xl bg-white p-1.5 shadow-sm object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
             <div>
               <p className="text-[15px] font-extrabold tracking-tight leading-none">RivaldSend</p>
               <p className="hidden sm:block text-xs font-medium text-[var(--text-secondary)]">Pro · Réactive</p>
@@ -205,6 +207,7 @@ function AppInner() {
           <SidebarNav />
           <main className="min-w-0">
             {view === "transfer" && <TransferThreePane onFiles={handleFiles} hasFiles={hasFiles} />}
+            {view === "discovery" && <div className="fade-in max-w-3xl"><DiscoveryView /></div>}
             {view === "pairing" && <div className="fade-in max-w-3xl"><PairingView /></div>}
             {view === "history" && <div className="fade-in max-w-3xl"><HistoryView /></div>}
             {view === "settings" && <div className="fade-in max-w-3xl"><SettingsView /></div>}

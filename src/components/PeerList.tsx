@@ -12,7 +12,7 @@ export function PeerList() {
     return (
       <div className="card-premium flex flex-col items-center justify-center rounded-[24px] p-8 text-center">
         <div className="relative">
-          <img src="/assets/Images/empty-no-peers.png" alt="" className="h-28 w-28 object-contain opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+          <img src="/assets/Images/empty-no-peers.png" alt="" width="112" height="112" decoding="async" loading="lazy" className="h-28 w-28 object-contain opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
           <div className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-600">
             <Search className="h-4 w-4" />
           </div>
