@@ -104,6 +104,7 @@ export type PeerDiscoveredEvent = {
   port: number;
   fingerprintShort: string;
   trusted: boolean;
+  platform: string;
 };
 
 export type IncomingRequestEvent = {

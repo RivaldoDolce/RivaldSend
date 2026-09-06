@@ -1,5 +1,7 @@
 export type PeerStatus = "discovered" | "paired" | "unknown";
 
+export type PeerPlatform = "macos" | "windows" | "linux" | "android" | "ios" | "unknown";
+
 export interface Peer {
   id: string;
   name: string;
@@ -9,6 +11,8 @@ export interface Peer {
   port: number;
   status: PeerStatus;
   trusted: boolean;
+  platform: PeerPlatform;
+  latencyMs?: number;
 }
 
 export interface TransferFile {
