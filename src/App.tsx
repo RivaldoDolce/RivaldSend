@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, memo } from "react";
-import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox, Wifi } from "lucide-react";
+import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox, Wifi, Pause, X, FileText } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { DropZone } from "./components/DropZone";
 import { PeerList } from "./components/PeerList";
@@ -85,6 +85,8 @@ const TransferThreePane = memo(function TransferThreePane({
 }) {
   const selectedTransferId = useTransfersStore((s) => s.selectedTransferId);
   const transfers = useTransfersStore((s) => s.transfers);
+  const peers = usePeersStore((s) => s.peers);
+  const selectTransfer = useTransfersStore((s) => s.selectTransfer);
   const selected = transfers.find((t) => t.id === selectedTransferId);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_320px] gap-6">
@@ -101,7 +103,48 @@ const TransferThreePane = memo(function TransferThreePane({
 
       <div className="space-y-4 min-w-0">
         <DropZone onFilesSelected={onFiles} />
-        {hasFiles ? <ProgressView /> : (
+        {transfers.length > 0 ? (
+          <div className="space-y-3">
+            {transfers.map((tr) => {
+              const pct = tr.totalBytes > 0 ? (tr.bytesDone / tr.totalBytes) * 100 : 0;
+              const isActive = tr.status === "running" || tr.status === "queued";
+              return (
+                <button
+                  key={tr.id}
+                  onClick={() => selectTransfer(tr.id)}
+                  className={`card-premium w-full rounded-[20px] p-4 text-left ${selectedTransferId === tr.id ? "ring-2 ring-[var(--accent)]" : ""}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-[var(--accent)]">
+                        <FileText className="h-6 w-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{tr.files[0]?.path ?? tr.id}</p>
+                        <div className="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-[var(--background)]">
+                          <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%`, transition: "width .3s" }} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-[var(--text-secondary)]">{(tr.speedBps / 1024 / 1024).toFixed(1)} MB/s</span>
+                      {isActive && (
+                        <div className="flex gap-1">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
+                            <Pause className="h-3 w-3" />
+                          </span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
+                            <X className="h-3 w-3" />
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
           <div className="rounded-[20px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center">
             <p className="text-sm font-medium">Aucun transfert</p>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">Glisse un fichier — envoi en &lt;3s</p>
@@ -110,22 +153,30 @@ const TransferThreePane = memo(function TransferThreePane({
       </div>
 
       <div className="space-y-4">
-        <div className={`rounded-[20px] border bg-[var(--surface)] shadow-sm transition-all ${selected ? "p-4" : "border-dashed border-[var(--border-strong)] p-6 text-center"}`}>
+        <div className={`rounded-[20px] border bg-[var(--surface)] shadow-sm ${selected ? "p-4" : "border-dashed border-[var(--border-strong)] p-6 text-center"}`}>
           {selected ? (
             <>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold">Détails</h3>
+                <h3 className="text-sm font-bold">Details</h3>
               </div>
               <p className="mono mt-2 text-xs break-all">{selected.files[0]?.path}</p>
               <div className="mt-3 space-y-2 text-xs">
                 <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Vitesse</span><span className="font-medium">{(selected.speedBps / 1024 / 1024).toFixed(0)} Mo/s</span></div>
                 <div className="flex justify-between"><span className="text-[var(--text-secondary)]">ETA</span><span className="font-medium">{selected.etaSecs}s</span></div>
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Intégrité</span><span className="text-emerald-600">BLAKE3 ✓</span></div>
+                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Integrite</span><span className="text-emerald-600">BLAKE3</span></div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]">
+                  <Pause className="mr-1 inline h-3 w-3" /> Pause
+                </button>
+                <button className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--error)] hover:bg-red-50">
+                  <X className="mr-1 inline h-3 w-3" /> Annuler
+                </button>
               </div>
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold">Aucune sélection</p>
+              <p className="text-sm font-semibold">Aucune selection</p>
               <p className="mt-1 text-xs text-[var(--text-secondary)]">Clique sur un transfert.</p>
             </>
           )}
