@@ -3,11 +3,11 @@ resolver = "2"
 members = ["crates/rivaldsend-proto", "crates/rivaldsend-core", "crates/rivaldsend-app"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["RivaldSend contributors"]
-repository = "https://github.com/rivaldsend/rivaldsend"
+repository = "https://github.com/RivaldoDolce/RivaldSend"
 rust-version = "1.85.0"
 
 [workspace.dependencies]
