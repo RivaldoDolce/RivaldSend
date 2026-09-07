@@ -121,6 +121,7 @@ function ManualConnectRow() {
 
 export function DiscoveryView() {
   const { t } = useTranslation();
+  const toast = useToast();
   const peers = usePeersStore((s) => s.peers);
   const isDiscovering = usePeersStore((s) => s.isDiscovering);
   const setDiscovering = usePeersStore((s) => s.setDiscovering);
@@ -132,9 +133,14 @@ export function DiscoveryView() {
     try {
       const { rescanPeers } = await import("../lib/tauri-bridge");
       await rescanPeers();
-    } catch { /* ignore */ }
-    window.setTimeout(() => setDiscovering(false), 2000);
-  }, [setDiscovering]);
+      toast.success("Scan terminé", "La recherche des appareils est terminée.");
+    } catch (err) {
+      console.error("[discovery] rescan_peers:", err);
+      toast.error("Scan échoué", "Impossible de rechercher les appareils sur le réseau.");
+    } finally {
+      window.setTimeout(() => setDiscovering(false), 500);
+    }
+  }, [setDiscovering, toast]);
 
   useEffect(() => {
     handleScan();

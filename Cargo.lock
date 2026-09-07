@@ -3903,6 +3903,7 @@ dependencies = [
  "blake3",
  "bytes",
  "dirs 5.0.1",
+ "mdns-sd",
  "qrcode",
  "reqwest 0.12.28",
  "rivaldsend-core",

@@ -183,30 +183,65 @@ pub async fn connect_by_ip(app: AppHandle, ip: String, port: u16) -> Result<crat
 }
 
 #[tauri::command]
-pub async fn rescan_peers(app: AppHandle) -> Result<(), String> {
-    let ifaces = rivaldsend_core::discovery::list_interfaces();
-    let mut seen = std::collections::HashSet::new();
-    for (name, ip) in ifaces {
-        let ip_str = ip.to_string();
-        let key = format!("{ip_str}:53317");
-        if !seen.insert(key.clone()) {
+pub async fn rescan_peers(
+    app: AppHandle,
+    discovery: State<'_, rivaldsend_core::discovery::Discovery>,
+) -> Result<(), String> {
+    use mdns_sd::ServiceEvent;
+
+    let daemon = discovery
+        .browse()
+        .map_err(|e| e.to_string())?;
+    let receiver = daemon
+        .browse(rivaldsend_core::discovery::SERVICE_TYPE)
+        .map_err(|e| e.to_string())?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(1200);
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+
+        let event = match tokio::time::timeout(remaining, receiver.recv_async()).await {
+            Ok(Ok(event)) => event,
+            _ => break,
+        };
+
+        let ServiceEvent::ServiceResolved(info) = event else {
+            continue;
+        };
+        if info.get_property_val_str("device_name") == Some("RivaldSend") {
             continue;
         }
-        let display_name = if name.starts_with("eth") || name.starts_with("wlan") || name.starts_with("en") {
-            format!("Appareil {ip_str}")
-        } else {
-            name.clone()
+        let Some(ip) = info.get_addresses().iter().find(|address| !address.is_loopback()) else {
+            continue;
         };
-        let ev = crate::events::PeerDiscoveredEvent {
-            id: format!("peer-{key}"),
-            name: display_name,
-            ip: ip_str,
-            port: 53317,
-            fingerprint_short: "0000".into(),
+        let ip = ip.to_string();
+        let port = info.get_port();
+        let id = format!("peer-{ip}:{port}");
+        let name = info
+            .get_property_val_str("device_name")
+            .unwrap_or(info.get_fullname())
+            .to_string();
+        let fingerprint_short = info
+            .get_property_val_str("fingerprint_short")
+            .unwrap_or_default()
+            .to_string();
+        let platform = info
+            .get_property_val_str("platform")
+            .unwrap_or("unknown")
+            .to_string();
+
+        let _ = app.emit("peer_discovered", crate::events::PeerDiscoveredEvent {
+            id,
+            name,
+            ip,
+            port,
+            fingerprint_short,
             trusted: false,
-            platform: std::env::consts::OS.into(),
-        };
-        let _ = app.emit("peer_discovered", ev);
+            platform,
+        });
     }
     Ok(())
 }

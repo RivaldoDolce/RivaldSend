@@ -19,9 +19,13 @@ pub fn run_tauri() {
     let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(
         rivaldsend_core::manager::TransferManager::default_resume_dir(),
     ));
+    let discovery = rivaldsend_core::discovery::Discovery::new()
+        .expect("impossible d'initialiser la découverte mDNS");
+    let _ = discovery.register("RivaldSend", 53317, "", "2.1");
     let http_manager = manager.clone();
     tauri::Builder::default()
         .manage(manager)
+        .manage(discovery)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
@@ -32,7 +36,7 @@ pub fn run_tauri() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let router = http::router(http::AppState { manager: http_manager });
-                match tokio::net::TcpListener::bind("127.0.0.1:53317").await {
+                match tokio::net::TcpListener::bind("0.0.0.0:53317").await {
                     Ok(l) => {
                         tracing::info!("HTTP server listening on 127.0.0.1:53317");
                         if let Err(e) = axum::serve(l, router).await {

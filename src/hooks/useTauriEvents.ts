@@ -7,6 +7,7 @@ import {
   onIncomingRequest,
   notifyTransferComplete,
   formatBytes,
+  connectByIp,
   type TransferProgressEvent,
   type PeerDiscoveredEvent,
   type IncomingRequestEvent,
@@ -100,4 +101,28 @@ export function useTauriEvents() {
       unlisteners.forEach((p) => p.then((fn) => fn()));
     };
   }, [addPeer, removePeer, updateTransfer, addEntry]);
+
+  useEffect(() => {
+    const retryTrustedPeers = async () => {
+      const trustedPeers = usePeersStore.getState().peers.filter((peer) => peer.trusted);
+      await Promise.all(
+        trustedPeers.map(async (peer) => {
+          try {
+            const discovered = await connectByIp(peer.ip, peer.port);
+            addPeer({
+              ...discovered,
+              fingerprint: discovered.fingerprintShort,
+              status: discovered.trusted ? "paired" : "discovered",
+              platform: (discovered.platform as Peer["platform"]) ?? peer.platform,
+            });
+          } catch {
+            // A peer can be offline; the next interval retries it.
+          }
+        }),
+      );
+    };
+
+    const timer = window.setInterval(retryTrustedPeers, 10_000);
+    return () => window.clearInterval(timer);
+  }, [addPeer]);
 }
