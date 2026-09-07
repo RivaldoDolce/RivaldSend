@@ -1,6 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Wifi, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar } from "lucide-react";
+import { Search, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar } from "lucide-react";
 import { usePeersStore } from "../stores/usePeersStore";
+import { VerifySheet } from "./VerifySheet";
+import { useToast } from "./toast/Toast";
+import { useTranslation } from "react-i18next";
 import type { Peer, PeerPlatform } from "../types";
 
 function useDebouncedValue(value: string, delay: number): string {
@@ -42,9 +45,10 @@ function PlatformIcon({ platform }: { platform: PeerPlatform }) {
 }
 
 function RadarView() {
+  const { t } = useTranslation();
   return (
-    <div className="radar mx-auto" aria-label="Recherche en cours">
-      <span className="sr-only">Scan reseau en cours</span>
+    <div className="radar mx-auto" aria-label={t("discoverySearching")}>
+      <span className="sr-only">{t("discoveryScanSr")}</span>
     </div>
   );
 }
@@ -71,6 +75,7 @@ function ManualConnectRow() {
   const [ip, setIp] = useState("");
   const [port, setPort] = useState("7420");
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   const handleConnect = useCallback(async () => {
     if (!ip.trim()) return;
@@ -79,12 +84,12 @@ function ManualConnectRow() {
       const { connectByIp } = await import("../lib/tauri-bridge");
       const peer = await connectByIp(ip.trim(), Number(port) || 7420);
       usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: peer.platform as never, latencyMs: undefined, trusted: peer.trusted });
-      const { useToast } = await import("./toast/Toast");
-      void useToast;
-    } catch {
-      // toast handled by caller if available
+      toast.success("Appareil ajouté", peer.name);
+    } catch (err) {
+      console.error("[discovery] connect_by_ip:", err);
+      toast.error("Appareil injoignable", "Vérifiez IP, port et pare-feu.");
     } finally { setBusy(false); }
-  }, [ip, port]);
+  }, [ip, port, toast]);
 
   return (
     <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -114,6 +119,7 @@ function ManualConnectRow() {
 }
 
 export function DiscoveryView() {
+  const { t } = useTranslation();
   const peers = usePeersStore((s) => s.peers);
   const isDiscovering = usePeersStore((s) => s.isDiscovering);
   const setDiscovering = usePeersStore((s) => s.setDiscovering);
@@ -154,7 +160,7 @@ export function DiscoveryView() {
         className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-white shadow-md hover:bg-[var(--accent-hover)] disabled:opacity-60"
       >
         {isDiscovering ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
-        {isDiscovering ? "Recherche en cours..." : "Rechercher des appareils à proximité"}
+        {isDiscovering ? t("discoverySearching") : t("discoverySearchNearby")}
       </button>
 
       <div className="relative">
@@ -162,7 +168,7 @@ export function DiscoveryView() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher un appareil ou une IP... (Ctrl+K)"
+          placeholder={t("discoverySearchPlaceholder")}
           className="w-full rounded-full border border-[var(--border)] bg-[var(--surface)] py-2.5 pl-9 pr-4 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-ring)]"
         />
       </div>
@@ -177,10 +183,10 @@ export function DiscoveryView() {
 
       {filtered.length === 0 && !isDiscovering && (
         <div className="flex flex-col items-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center">
-          <Wifi className="h-10 w-10 text-[var(--text-tertiary)]" />
-          <p className="mt-3 text-sm font-medium">Aucun appareil detecte</p>
+          <img src="/assets/empty-no-peers.webp" alt="" width={80} height={80} decoding="async" loading="lazy" className="h-20 w-20 object-contain opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+          <p className="mt-3 text-sm font-medium">{t("discoveryNoPeers")}</p>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Verifiez que les appareils sont sur le meme reseau
+            {t("discoveryNoPeersDesc")}
           </p>
         </div>
       )}
@@ -195,6 +201,7 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
   const [connState, setConnState] = useState<"discovered" | "connecting" | "verifying" | "paired" | "failed">(
     peer.trusted ? "paired" : "discovered"
   );
+  const [showVerify, setShowVerify] = useState(false);
   const latency = usePeerLatency(peer.ip, peer.port);
 
   const handleConnect = useCallback(async () => {
@@ -203,13 +210,30 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
       const { connectByIp } = await import("../lib/tauri-bridge");
       await connectByIp(peer.ip, peer.port);
       setConnState("verifying");
-      await new Promise((r) => setTimeout(r, 400));
-      setConnState("paired");
+      setShowVerify(true);
     } catch {
       setConnState("failed");
       setTimeout(() => setConnState("discovered"), 2500);
     }
   }, [peer.ip, peer.port]);
+
+  const handleApprove = useCallback(async () => {
+    try {
+      const { approvePeer } = await import("../lib/tauri-bridge");
+      await approvePeer(peer.id);
+      usePeersStore.getState().updatePeer(peer.id, { trusted: true, status: "paired" });
+      setShowVerify(false);
+      setConnState("paired");
+    } catch {
+      setShowVerify(false);
+      setConnState("failed");
+    }
+  }, [peer.id]);
+
+  const handleReject = useCallback(() => {
+    setShowVerify(false);
+    setConnState("discovered");
+  }, []);
 
   const handleSend = useCallback(() => {
     openSendModal([]);
@@ -253,6 +277,7 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
             : "Connecter"}
         </button>
       )}
+      {showVerify && <VerifySheet peer={peer} onApprove={handleApprove} onReject={handleReject} />}
     </div>
   );
 }

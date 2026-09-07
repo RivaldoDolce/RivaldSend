@@ -48,7 +48,8 @@ pub fn run_tauri() {
             commands::list_network_interfaces,
             commands::ping_peer,
             commands::connect_by_ip,
-            commands::rescan_peers
+            commands::rescan_peers,
+            commands::approve_peer
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| { eprintln!("tauri error: {e}"); });

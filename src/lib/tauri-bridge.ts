@@ -74,6 +74,10 @@ export async function rescanPeers(): Promise<void> {
   return invoke("rescan_peers");
 }
 
+export async function approvePeer(peerId: string): Promise<void> {
+  return invoke("approve_peer", { peerId });
+}
+
 // ============ DIALOG HELPERS ============
 
 export async function pickFolder(): Promise<string | null> {

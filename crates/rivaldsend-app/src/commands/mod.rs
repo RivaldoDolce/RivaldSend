@@ -125,3 +125,10 @@ pub async fn connect_by_ip(ip: String, port: u16) -> Result<crate::events::PeerD
 pub async fn rescan_peers() -> Result<(), String> {
     Ok(())
 }
+
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn approve_peer(peerId: String) -> Result<(), String> {
+    let _ = peerId;
+    Ok(())
+}

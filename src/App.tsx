@@ -44,17 +44,18 @@ const SidebarNav = memo(function SidebarNav() {
     { id: "settings", label: "Paramètres", icon: Settings },
   ] as const;
   return (
-    <nav className="flex flex-col gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-sm">
+    <nav className="flex flex-col gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-sm w-full">
       {items.map((item) => {
         const active = view === item.id;
         return (
           <button
             key={item.id}
             onClick={() => setView(item.id as typeof view)}
+            title={item.label}
             className={`flex items-center gap-3 rounded-[14px] px-3 py-3 text-left transition-colors ${active ? "bg-[var(--accent)] text-white shadow-sm" : "hover:bg-[var(--surface-hover)]"}`}
           >
             <item.icon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-            <span className="text-sm font-semibold">{item.label}</span>
+            <span className="hidden xl:inline text-sm font-semibold">{item.label}</span>
           </button>
         );
       })}
@@ -311,8 +312,10 @@ function AppInner() {
             {mobileTab === "settings" && <div className="fade-in"><SettingsView /></div>}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
-            <SidebarNav />
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-[64px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="hidden md:block">
+              <SidebarNav />
+            </div>
             <main className="min-w-0">
               {view === "transfer" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} _hasFiles={hasFiles} />}
               {view === "discovery" && <div className="fade-in max-w-3xl"><DiscoveryView /></div>}

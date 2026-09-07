@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Upload, ShieldCheck, FolderOpen, FileText, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pickFiles, pickFolder } from "../lib/tauri-bridge";
@@ -21,7 +21,7 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
     return `${(totalSize / 1024 / 1024 / 1024).toFixed(2)} Go`;
   }, [totalSize]);
 
-  const lastOpenRef = useMemo(() => ({ current: 0 }), []);
+  const lastOpenRef = useRef(0);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => {
@@ -61,25 +61,12 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
   const handlePick = useCallback(async () => {
     const paths = await pickFiles();
     if (paths && paths.length > 0 && onPathsSelected) onPathsSelected(paths);
-    else if (paths && paths.length > 0) {
-      const fakeFiles = paths.map((p) => ({ name: p.split("/").pop() ?? p, size: 0 } as unknown as File));
-      onFilesSelected(fakeFiles);
-    }
-  }, [onFilesSelected, onPathsSelected]);
+  }, [onPathsSelected]);
 
   const handlePickFolder = useCallback(async () => {
     const folder = await pickFolder();
     if (folder && onPathsSelected) onPathsSelected([folder]);
-    else if (folder) onFilesSelected([{ name: folder.split("/").pop() ?? folder, size: 0 } as unknown as File]);
-  }, [onFilesSelected, onPathsSelected]);
-
-  const handleInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files ? Array.from(e.target.files) : [];
-      if (files.length > 0) onFilesSelected(files);
-    },
-    [onFilesSelected]
-  );
+  }, [onPathsSelected]);
 
   const clearPending = useCallback(() => usePeersStore.getState().closeSendModal(), []);
 
@@ -115,7 +102,7 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
               {pending.slice(0,4).map((f) => (
                 <div key={f.path} className="flex items-center gap-2 text-xs truncate">
                   <FileText className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" />
-                  <span className="truncate">{f.path.split("/").pop()}</span>
+                  <span className="truncate">{f.path.split(/[\\/]/).pop()}</span>
                 </div>
               ))}
               {pending.length>4 && <p className="text-xs text-[var(--text-tertiary)]">+{pending.length-4} autres</p>}
@@ -131,9 +118,6 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
             <FolderOpen className="h-4 w-4" />
             Dossier
           </button>
-          <label className="hidden">
-            <input type="file" multiple className="hidden" onChange={handleInput} />
-          </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-hover)] px-3 py-1 font-medium">
