@@ -11,6 +11,13 @@ function formatBytes(n: number): string {
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} Mo`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} Go`;
 }
+function formatEta(secs: number): string {
+  if (!secs || secs < 0) return "—";
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}m ${String(s).padStart(2, "0")}s`;
+}
 
 const CircularProgress = memo(function CircularProgress({ pct, size = 120 }: { pct: number; size?: number }) {
   const r = 52;
@@ -39,6 +46,9 @@ const TransferRow = memo(function TransferRow({ id }: { id: string }) {
   const etaSecs = progress?.etaSecs ?? tr.etaSecs;
   const pct = tr.totalBytes > 0 ? (bytesDone / tr.totalBytes) * 100 : 0;
 
+  const chunks = tr.totalBytes > 0 ? Math.ceil(tr.totalBytes / (4 * 1024 * 1024)) : 0;
+  const chunksDone = tr.totalBytes > 0 ? Math.floor((pct / 100) * chunks) : 0;
+
   if (isMobile) {
     return (
       <div className="card-premium flex flex-col items-center gap-4 rounded-[20px] p-6 text-center">
@@ -46,6 +56,7 @@ const TransferRow = memo(function TransferRow({ id }: { id: string }) {
         <div className="min-w-0 w-full">
           <p className="text-sm font-semibold truncate text-[var(--text-primary)]">{tr.files[0]?.path ?? tr.id}</p>
           <p className="text-xs text-[var(--text-secondary)]">{formatBytes(speedBps)}/s · {formatBytes(bytesDone)} / {formatBytes(tr.totalBytes)}</p>
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">Chunks {chunksDone}/{chunks} · {formatEta(etaSecs)} restant · TLS 1.3</p>
         </div>
         <div className="flex gap-3">
           <button onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] hover:bg-[var(--surface-hover)]" aria-label="Pause"><Pause className="h-4 w-4" /></button>
@@ -80,8 +91,9 @@ const TransferRow = memo(function TransferRow({ id }: { id: string }) {
           <Zap className="h-3.5 w-3.5 text-[var(--accent)]" /> {formatBytes(speedBps)}/s
         </span>
         <span className="inline-flex items-center gap-1.5 text-[var(--text-secondary)]">
-          <Clock3 className="h-3.5 w-3.5" /> ETA {etaSecs}s - {formatBytes(bytesDone)} / {formatBytes(tr.totalBytes)}
+          <Clock3 className="h-3.5 w-3.5" /> {formatEta(etaSecs)} · {formatBytes(bytesDone)} / {formatBytes(tr.totalBytes)}
         </span>
+        <span className="text-[var(--text-tertiary)]">Chunks {chunksDone}/{chunks} · TLS 1.3</span>
         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 capitalize">{tr.status}</span>
       </div>
     </div>

@@ -13,6 +13,7 @@ import { Onboarding } from "./components/Onboarding";
 import { IncomingRequestToast } from "./components/IncomingRequestToast";
 import { ToastProvider } from "./components/toast/Toast";
 import { StatusBar } from "./components/StatusBar";
+import { CommandPalette } from "./components/CommandPalette";
 import { useNavStore } from "./stores/useNavStore";
 import { usePeersStore } from "./stores/usePeersStore";
 import { useTransfersStore } from "./stores/useTransfersStore";
@@ -24,6 +25,13 @@ import "./i18n";
 
 const APP_VERSION = "0.3.0";
 
+function formatEta(secs: number): string {
+  if (!secs || secs < 0) return "—";
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}m ${String(s).padStart(2, "0")}s`;
+}
 const SidebarNav = memo(function SidebarNav() {
   const view = useNavStore((s) => s.view);
   const setView = useNavStore((s) => s.setView);
@@ -106,6 +114,9 @@ const TransferThreePane = memo(function TransferThreePane({
       </div>
 
       <div className="space-y-4 min-w-0">
+        <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Vos fichiers ne quittent jamais votre réseau local · Chiffré de bout en bout
+        </div>
         <DropZone onFilesSelected={onFiles} onPathsSelected={onPaths} />
         {transfers.length > 0 ? (
           <div className="space-y-3">
@@ -165,9 +176,10 @@ const TransferThreePane = memo(function TransferThreePane({
               </div>
               <p className="mono mt-2 text-xs break-all">{selected.files[0]?.path}</p>
               <div className="mt-3 space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Vitesse</span><span className="font-medium">{(selected.speedBps / 1024 / 1024).toFixed(0)} Mo/s</span></div>
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">ETA</span><span className="font-medium">{selected.etaSecs}s</span></div>
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Integrite</span><span className="text-emerald-600">BLAKE3</span></div>
+                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Vitesse</span><span className="font-medium">{(selected.speedBps / 1024 / 1024).toFixed(1)} Mo/s</span></div>
+                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Temps restant</span><span className="font-medium">{formatEta(selected.etaSecs)}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chunks</span><span className="font-medium">{Math.floor((selected.bytesDone / Math.max(1, selected.totalBytes))*Math.ceil(selected.totalBytes/(4*1024*1024)))} / {Math.ceil(selected.totalBytes/(4*1024*1024))}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chiffrement</span><span className="text-emerald-600">TLS 1.3 · BLAKE3</span></div>
               </div>
               <div className="mt-4 flex gap-2">
                 {selected.status === "paused" ? (
@@ -298,6 +310,7 @@ function AppInner() {
       {isMobile && <MobileBottomNav />}
       <SendModal />
       <IncomingRequestToast />
+      <CommandPalette />
 
       {!isMobile ? <StatusBar /> : (
         <footer className="border-t border-[var(--border)] py-3 text-center text-xs text-[var(--text-tertiary)] pb-[env(safe-area-inset-bottom)]">

@@ -51,12 +51,33 @@
     radial-gradient(700px 500px at 80% 20%, rgba(94,92,230,0.07), transparent 60%),
     radial-gradient(800px 600px at 50% 100%, rgba(48,209,88,0.05), transparent 60%),
     var(--background);
+  position: relative;
 }
+.app-aurora::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url(/assets/hero-landing.webp);
+  background-size: 900px;
+  background-repeat: no-repeat;
+  background-position: 85% 30%;
+  z-index: 0;
+}
+.perf-lite .app-aurora::before { display: none; }
 .dark .app-aurora {
   background:
     radial-gradient(600px 400px at 20% 10%, rgba(10,132,255,0.12), transparent 60%),
     radial-gradient(700px 500px at 80% 20%, rgba(94,92,230,0.10), transparent 60%),
     var(--background);
+}
+.glass { backdrop-filter: blur(16px) saturate(180%); background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+@media (max-width: 820px) {
+  .app-aurora::before { background-size: 600px; background-position: center 12%; }
 }
 
 html, body { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -66,13 +87,14 @@ button, input, select, textarea { font-family: inherit; }
 .rivaldsend-dropzone {
   border: 1.5px dashed var(--border-strong);
   background: var(--surface);
-  transition: border-color .2s, background-color .2s;
+  transition: border-color .2s cubic-bezier(0.16,1,0.3,1), background-color .2s cubic-bezier(0.16,1,0.3,1), transform .2s cubic-bezier(0.16,1,0.3,1);
 }
-.rivaldsend-dropzone:hover { border-color: var(--accent); background: var(--accent-light); }
+.rivaldsend-dropzone:hover { border-color: var(--accent); background: var(--accent-light); transform: translateY(-1px); }
 .rivaldsend-dropzone-active {
   border-color: var(--accent) !important;
   background: var(--accent-light) !important;
   box-shadow: 0 0 0 4px var(--accent-ring), var(--shadow-lg);
+  transform: translateY(-2px) scale(1.01);
 }
 
 .card-premium { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); transition: border-color .2s, background-color .2s; }
