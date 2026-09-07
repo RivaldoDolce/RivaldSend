@@ -16,6 +16,15 @@ impl TransferManager {
     pub fn new(resume_dir: std::path::PathBuf) -> Self {
         Self { queue: tokio::sync::Mutex::new(Queue::new()), statuses: tokio::sync::Mutex::new(HashMap::new()), semaphore: Arc::new(Semaphore::new(2)), resume_dir }
     }
+    pub fn default_resume_dir() -> std::path::PathBuf {
+        dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join("rivaldsend-resume")
+    }
+    pub fn default_partial_dir(id: Uuid) -> std::path::PathBuf {
+        dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join(format!("rivaldsend-partial/{id}"))
+    }
+    pub fn resume_path(&self, id: Uuid) -> std::path::PathBuf {
+        self.resume_dir.join(format!("{id}.json"))
+    }
     pub async fn enqueue(&self, path: std::path::PathBuf) -> Uuid {
         let id = Uuid::new_v4();
         let mut q = self.queue.lock().await;
@@ -48,7 +57,7 @@ impl TransferManager {
         s.insert(id, TransferStatus::Failed("cancelled".into()));
         let path = self.resume_dir.join(format!("{id}.json"));
         let _ = tokio::fs::remove_file(&path).await;
-        let partial_dir = std::path::PathBuf::from(format!("/tmp/rivaldsend-partial/{id}"));
+        let partial_dir = Self::default_partial_dir(id);
         let _ = tokio::fs::remove_dir_all(&partial_dir).await;
         Ok(())
     }

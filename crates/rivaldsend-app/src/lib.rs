@@ -2,34 +2,46 @@ pub mod commands;
 pub mod events;
 pub mod http;
 use std::sync::Arc;
+use tauri::Emitter;
 pub fn build_router() -> axum::Router {
-    let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(std::path::PathBuf::from("/tmp/rivaldsend-resume")));
+    let dir = rivaldsend_core::manager::TransferManager::default_resume_dir();
+    let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(dir));
     http::router(http::AppState { manager })
 }
 pub fn run_tauri() {
-    if let Ok(profile) = rivaldsend_core::firewall::detect_windows_firewall() {
-        if rivaldsend_core::firewall::should_block_server(&profile) {
-            eprintln!("Réseau public détecté — serveur non démarré");
-        }
+    let should_block = rivaldsend_core::firewall::detect_windows_firewall()
+        .map(|p| rivaldsend_core::firewall::should_block_server(&p))
+        .unwrap_or(false);
+    if should_block {
+        eprintln!("Réseau public détecté — serveur non démarré");
+        std::process::exit(1);
     }
+    let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(
+        rivaldsend_core::manager::TransferManager::default_resume_dir(),
+    ));
+    let http_manager = manager.clone();
     tauri::Builder::default()
+        .manage(manager)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_os::init())
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let router = build_router();
-                let listener = tokio::net::TcpListener::bind("0.0.0.0:53317").await;
-                if let Ok(l) = listener {
-                    let _ = axum::serve(l, router).await;
-                } else {
-                    eprintln!("failed to bind http server");
+                let router = http::router(http::AppState { manager: http_manager });
+                match tokio::net::TcpListener::bind("127.0.0.1:53317").await {
+                    Ok(l) => {
+                        tracing::info!("HTTP server listening on 127.0.0.1:53317");
+                        if let Err(e) = axum::serve(l, router).await {
+                            tracing::error!("http server error: {e}");
+                        }
+                    }
+                    Err(e) => tracing::error!("failed to bind http server: {e}"),
                 }
-                let _ = handle;
+                let _ = handle.emit("server_ready", serde_json::json!({"port":53317}));
             });
             Ok(())
         })

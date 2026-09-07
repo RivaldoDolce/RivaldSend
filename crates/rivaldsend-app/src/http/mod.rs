@@ -19,10 +19,22 @@ async fn create_transfer(State(_s): State<AppState>, Json(body): Json<CreateTran
     rivaldsend_proto::validation::validate_manifest(&body.manifest).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     Ok(Json(serde_json::json!({"transfer_id": body.manifest.transfer_id})))
 }
-async fn put_chunk(State(_s): State<AppState>, Path(id): Path<String>, body: bytes::Bytes) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+async fn put_chunk(State(s): State<AppState>, Path(id): Path<String>, body: bytes::Bytes) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     if body.len() > rivaldsend_proto::limits::MAX_CHUNK_SIZE { return Err((StatusCode::PAYLOAD_TOO_LARGE, "chunk too large".into())); }
-    let _ = id;
-    Ok(Json(serde_json::json!({"ack_offset": body.len()})))
+    let uuid = id.parse::<uuid::Uuid>().map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    if s.manager.status(&uuid).await.is_none() {
+        return Err((StatusCode::NOT_FOUND, "transfer not found".into()));
+    }
+    let chunk_dir = rivaldsend_core::manager::TransferManager::default_partial_dir(uuid);
+    tokio::fs::create_dir_all(&chunk_dir).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let offset_path = chunk_dir.join(format!("{}.chunk", uuid));
+    tokio::fs::write(&offset_path, &body).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let ack = body.len() as u64;
+    let resume_path = s.manager.resume_path(uuid);
+    let mut state = s.manager.resume(uuid).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.unwrap_or_else(|| rivaldsend_core::resume::ResumeState::new(uuid));
+    state.add_ack(rivaldsend_proto::ChunkAck { offset: 0, size: ack as u32 });
+    let _ = rivaldsend_core::resume::save(&resume_path, &state).await;
+    Ok(Json(serde_json::json!({"ack_offset": ack})))
 }
 async fn resume_transfer(State(s): State<AppState>, Path(id): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let uuid = id.parse::<uuid::Uuid>().map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
