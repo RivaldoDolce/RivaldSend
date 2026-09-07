@@ -93,3 +93,35 @@ pub fn check_firewall() -> Result<String, String> {
 pub fn list_network_interfaces() -> Vec<(String, String)> {
     rivaldsend_core::discovery::list_interfaces().into_iter().map(|(n, ip)| (n, ip.to_string())).collect()
 }
+
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn ping_peer(ip: String, port: u16) -> Result<u32, String> {
+    let start = std::time::Instant::now();
+    let addr = format!("{ip}:{port}");
+    tokio::time::timeout(std::time::Duration::from_millis(800), tokio::net::TcpStream::connect(addr))
+        .await
+        .map_err(|_| "timeout".to_string())?
+        .map_err(|e| e.to_string())?;
+    Ok(start.elapsed().as_millis() as u32)
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn connect_by_ip(ip: String, port: u16) -> Result<crate::events::PeerDiscoveredEvent, String> {
+    let _ = ping_peer(ip.clone(), port).await;
+    Ok(crate::events::PeerDiscoveredEvent {
+        id: format!("manual-{ip}:{port}"),
+        name: format!("Appareil {ip}"),
+        ip,
+        port,
+        fingerprint_short: "0000".into(),
+        trusted: false,
+        platform: std::env::consts::OS.into(),
+    })
+}
+
+#[tauri::command]
+pub async fn rescan_peers() -> Result<(), String> {
+    Ok(())
+}

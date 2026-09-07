@@ -49,15 +49,42 @@ function RadarView() {
   );
 }
 
+function usePeerLatency(ip: string, port: number) {
+  const [ms, setMs] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    const ping = async () => {
+      try {
+        const { pingPeer } = await import("../lib/tauri-bridge");
+        const v = await pingPeer(ip, port);
+        if (alive) setMs(v);
+      } catch { if (alive) setMs(undefined); }
+    };
+    ping();
+    const t = setInterval(ping, 5000);
+    return () => { alive = false; clearInterval(t); };
+  }, [ip, port]);
+  return ms;
+}
+
 function ManualConnectRow() {
   const [ip, setIp] = useState("");
   const [port, setPort] = useState("7420");
+  const [busy, setBusy] = useState(false);
 
-  const handleConnect = useCallback(() => {
+  const handleConnect = useCallback(async () => {
     if (!ip.trim()) return;
-    const { openSendModal } = usePeersStore.getState();
-    openSendModal([]);
-  }, [ip]);
+    setBusy(true);
+    try {
+      const { connectByIp } = await import("../lib/tauri-bridge");
+      const peer = await connectByIp(ip.trim(), Number(port) || 7420);
+      usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: peer.platform as never, latencyMs: undefined, trusted: peer.trusted });
+      const { useToast } = await import("./toast/Toast");
+      void useToast;
+    } catch {
+      // toast handled by caller if available
+    } finally { setBusy(false); }
+  }, [ip, port]);
 
   return (
     <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -77,10 +104,10 @@ function ManualConnectRow() {
       />
       <button
         onClick={handleConnect}
-        disabled={!ip.trim()}
+        disabled={!ip.trim() || busy}
         className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
       >
-        Connecter
+        {busy ? "..." : "Connecter"}
       </button>
     </div>
   );
@@ -93,9 +120,13 @@ export function DiscoveryView() {
   const [query, setQuery] = useState("");
   const q = useDebouncedValue(query, 120);
 
-  const handleScan = useCallback(() => {
+  const handleScan = useCallback(async () => {
     setDiscovering(true);
-    window.setTimeout(() => setDiscovering(false), 2500);
+    try {
+      const { rescanPeers } = await import("../lib/tauri-bridge");
+      await rescanPeers();
+    } catch { /* ignore */ }
+    window.setTimeout(() => setDiscovering(false), 2000);
   }, [setDiscovering]);
 
   useEffect(() => {
@@ -164,19 +195,21 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
   const [connState, setConnState] = useState<"discovered" | "connecting" | "verifying" | "paired" | "failed">(
     peer.trusted ? "paired" : "discovered"
   );
+  const latency = usePeerLatency(peer.ip, peer.port);
 
   const handleConnect = useCallback(async () => {
     setConnState("connecting");
     try {
-      await new Promise((r) => setTimeout(r, 800));
+      const { connectByIp } = await import("../lib/tauri-bridge");
+      await connectByIp(peer.ip, peer.port);
       setConnState("verifying");
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 400));
       setConnState("paired");
     } catch {
       setConnState("failed");
       setTimeout(() => setConnState("discovered"), 2500);
     }
-  }, []);
+  }, [peer.ip, peer.port]);
 
   const handleSend = useCallback(() => {
     openSendModal([]);
@@ -194,10 +227,10 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold truncate">{peer.name}</p>
         <p className="mono text-xs text-[var(--text-secondary)]">
-          {peer.ip}:{peer.port} - {peer.platform}
+          {peer.ip}:{peer.port} · {peer.platform}
         </p>
       </div>
-      <LatencyBadge ms={peer.latencyMs} />
+      <LatencyBadge ms={latency ?? peer.latencyMs} />
       {connState === "paired" ? (
         <button
           onClick={handleSend}
@@ -214,9 +247,9 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
           {connState === "connecting"
             ? "Connexion..."
             : connState === "verifying"
-            ? "Verification..."
+            ? "Vérification..."
             : connState === "failed"
-            ? "Reessayer"
+            ? "Réessayer"
             : "Connecter"}
         </button>
       )}

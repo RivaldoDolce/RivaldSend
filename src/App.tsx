@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, memo } from "react";
 import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox, Wifi, Pause, X, FileText } from "lucide-react";
 import { cancelTransfer, pauseTransfer, resumeTransfer } from "./lib/tauri-bridge";
 import { checkFirewall } from "./lib/tauri-bridge";
+import { useProgressStore } from "./stores/useProgressStore";
 import { DropZone } from "./components/DropZone";
 import { PeerList } from "./components/PeerList";
 import { PairingView } from "./components/PairingView";
@@ -37,10 +38,10 @@ const SidebarNav = memo(function SidebarNav() {
   const setView = useNavStore((s) => s.setView);
   const items = [
     { id: "transfer", label: "Transfert", icon: Send },
-    { id: "discovery", label: "Decouverte", icon: Wifi },
+    { id: "discovery", label: "Découverte", icon: Wifi },
     { id: "pairing", label: "Appairage", icon: Shield },
     { id: "history", label: "Historique", icon: History },
-    { id: "settings", label: "Parametres", icon: Settings },
+    { id: "settings", label: "Paramètres", icon: Settings },
   ] as const;
   return (
     <nav className="flex flex-col gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-sm">
@@ -86,6 +87,82 @@ const MobileBottomNav = memo(function MobileBottomNav() {
   );
 });
 
+const TransferRowInline = memo(function TransferRowInline({ id, selectedId, onSelect }: { id: string; selectedId: string | null; onSelect: (id: string) => void }) {
+  const tr = useTransfersStore((s) => s.transfers.find((t) => t.id === id));
+  const prog = useProgressStore((s) => s.byId[id]);
+  if (!tr) return null;
+  const bytesDone = prog?.bytesDone ?? tr.bytesDone;
+  const speedBps = prog?.speedBps ?? tr.speedBps;
+  const pct = tr.totalBytes > 0 ? (bytesDone / tr.totalBytes) * 100 : 0;
+  const isActive = tr.status === "running" || tr.status === "queued";
+  return (
+    <button
+      onClick={() => onSelect(tr.id)}
+      className={`card-premium w-full rounded-[20px] p-4 text-left ${selectedId === tr.id ? "ring-2 ring-[var(--accent)]" : ""}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-[var(--accent)]">
+            <FileText className="h-6 w-6" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{tr.files[0]?.path?.split(/[\\/]/).pop() ?? tr.id}</p>
+            <div className="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-[var(--background)]">
+              <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%`, transition: "width .3s" }} />
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-[var(--text-secondary)]">{(speedBps / 1024 / 1024).toFixed(1)} MB/s</span>
+          {isActive && (
+            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+              <button aria-label="Pause" onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
+                <Pause className="h-3 w-3" />
+              </button>
+              <button aria-label="Annuler" onClick={() => cancelTransfer(tr.id).catch(console.error)} className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+});
+
+const TransferDetails = memo(function TransferDetails({ id }: { id: string }) {
+  const tr = useTransfersStore((s) => s.transfers.find((t) => t.id === id));
+  const prog = useProgressStore((s) => s.byId[id]);
+  if (!tr) return null;
+  const speedBps = prog?.speedBps ?? tr.speedBps;
+  const etaSecs = prog?.etaSecs ?? tr.etaSecs;
+  const bytesDone = prog?.bytesDone ?? tr.bytesDone;
+  const chunksTotal = Math.ceil(tr.totalBytes / (4 * 1024 * 1024)) || 1;
+  const chunksDone = Math.floor((bytesDone / Math.max(1, tr.totalBytes)) * chunksTotal);
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold">Détails</h3>
+      </div>
+      <p className="mono mt-2 text-xs break-all">{tr.files[0]?.path}</p>
+      <div className="mt-3 space-y-2 text-xs">
+        <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Vitesse</span><span className="font-medium">{(speedBps / 1024 / 1024).toFixed(1)} Mo/s</span></div>
+        <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Temps restant</span><span className="font-medium">{formatEta(etaSecs)}</span></div>
+        <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chunks</span><span className="font-medium">{chunksDone} / {chunksTotal}</span></div>
+        <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chiffrement</span><span className="text-emerald-600">TLS 1.3 · BLAKE3</span></div>
+      </div>
+      <div className="mt-4 flex gap-2">
+        {tr.status === "paused" ? (
+          <button onClick={() => resumeTransfer(tr.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]">Reprendre</button>
+        ) : (
+          <button onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]"><Pause className="mr-1 inline h-3 w-3" /> Pause</button>
+        )}
+        <button onClick={() => cancelTransfer(tr.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--error)] hover:bg-red-50"><X className="mr-1 inline h-3 w-3" /> Annuler</button>
+      </div>
+    </>
+  );
+});
+
 const TransferThreePane = memo(function TransferThreePane({
   onFiles,
   onPaths,
@@ -96,9 +173,9 @@ const TransferThreePane = memo(function TransferThreePane({
   _hasFiles: boolean;
 }) {
   const selectedTransferId = useTransfersStore((s) => s.selectedTransferId);
-  const transfers = useTransfersStore((s) => s.transfers);
+  const transferIds = useTransfersStore((s) => s.transfers.map((t) => t.id));
   const selectTransfer = useTransfersStore((s) => s.selectTransfer);
-  const selected = transfers.find((t) => t.id === selectedTransferId);
+  const selected = transferIds.includes(selectedTransferId ?? "") ? selectedTransferId : null;
   const { isNarrow } = useDeviceContext();
   return (
     <div className={`grid gap-6 ${isNarrow ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_320px]"}`}>
@@ -118,46 +195,11 @@ const TransferThreePane = memo(function TransferThreePane({
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Vos fichiers ne quittent jamais votre réseau local · Chiffré de bout en bout
         </div>
         <DropZone onFilesSelected={onFiles} onPathsSelected={onPaths} />
-        {transfers.length > 0 ? (
+        {transferIds.length > 0 ? (
           <div className="space-y-3">
-            {transfers.map((tr) => {
-              const pct = tr.totalBytes > 0 ? (tr.bytesDone / tr.totalBytes) * 100 : 0;
-              const isActive = tr.status === "running" || tr.status === "queued";
-              return (
-                <button
-                  key={tr.id}
-                  onClick={() => selectTransfer(tr.id)}
-                  className={`card-premium w-full rounded-[20px] p-4 text-left ${selectedTransferId === tr.id ? "ring-2 ring-[var(--accent)]" : ""}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-[var(--accent)]">
-                        <FileText className="h-6 w-6" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{tr.files[0]?.path ?? tr.id}</p>
-                        <div className="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-[var(--background)]">
-                          <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%`, transition: "width .3s" }} />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-[var(--text-secondary)]">{(tr.speedBps / 1024 / 1024).toFixed(1)} MB/s</span>
-                      {isActive && (
-                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          <button aria-label="Pause" onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
-                            <Pause className="h-3 w-3" />
-                          </button>
-                          <button aria-label="Annuler" onClick={() => cancelTransfer(tr.id).catch(console.error)} className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+            {transferIds.map((id) => (
+              <TransferRowInline key={id} id={id} selectedId={selectedTransferId} onSelect={selectTransfer} />
+            ))}
           </div>
         ) : (
           <div className="rounded-[20px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center">
@@ -170,35 +212,10 @@ const TransferThreePane = memo(function TransferThreePane({
       <div className="space-y-4">
         <div className={`rounded-[20px] border bg-[var(--surface)] shadow-sm ${selected ? "p-4" : "border-dashed border-[var(--border-strong)] p-6 text-center"}`}>
           {selected ? (
-            <>
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold">Details</h3>
-              </div>
-              <p className="mono mt-2 text-xs break-all">{selected.files[0]?.path}</p>
-              <div className="mt-3 space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Vitesse</span><span className="font-medium">{(selected.speedBps / 1024 / 1024).toFixed(1)} Mo/s</span></div>
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Temps restant</span><span className="font-medium">{formatEta(selected.etaSecs)}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chunks</span><span className="font-medium">{Math.floor((selected.bytesDone / Math.max(1, selected.totalBytes))*Math.ceil(selected.totalBytes/(4*1024*1024)))} / {Math.ceil(selected.totalBytes/(4*1024*1024))}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chiffrement</span><span className="text-emerald-600">TLS 1.3 · BLAKE3</span></div>
-              </div>
-              <div className="mt-4 flex gap-2">
-                {selected.status === "paused" ? (
-                  <button onClick={() => resumeTransfer(selected.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]">
-                    Reprendre
-                  </button>
-                ) : (
-                  <button onClick={() => pauseTransfer(selected.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]">
-                    <Pause className="mr-1 inline h-3 w-3" /> Pause
-                  </button>
-                )}
-                <button onClick={() => cancelTransfer(selected.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--error)] hover:bg-red-50">
-                  <X className="mr-1 inline h-3 w-3" /> Annuler
-                </button>
-              </div>
-            </>
+            <TransferDetails id={selected} />
           ) : (
             <>
-              <p className="text-sm font-semibold">Aucune selection</p>
+              <p className="text-sm font-semibold">Aucune sélection</p>
               <p className="mt-1 text-xs text-[var(--text-secondary)]">Clique sur un transfert.</p>
             </>
           )}

@@ -21,6 +21,7 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
     return `${(totalSize / 1024 / 1024 / 1024).toFixed(2)} Go`;
   }, [totalSize]);
 
+  const lastOpenRef = useMemo(() => ({ current: 0 }), []);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => {
@@ -29,25 +30,32 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
         else if (event.payload.type === "drop") {
           setDragging(false);
           const paths = event.payload.paths;
-          if (paths.length > 0 && onPathsSelected) onPathsSelected(paths);
-          else if (paths.length > 0) {
-            const fakeFiles = paths.map((p) => ({ name: p.split("/").pop() ?? p, size: 0 } as unknown as File));
+          if (paths.length === 0) return;
+          const now = Date.now();
+          if (now - lastOpenRef.current < 300) return;
+          lastOpenRef.current = now;
+          if (onPathsSelected) onPathsSelected(paths);
+          else {
+            const fakeFiles = paths.map((p) => ({ name: p.split(/[\\/]/).pop() ?? p, size: 0 } as unknown as File));
             onFilesSelected(fakeFiles);
           }
         } else setDragging(false);
       }).then((fn) => { unlisten = fn; }).catch(() => {});
     }).catch(() => {});
     return () => { unlisten?.(); };
-  }, [onFilesSelected, onPathsSelected]);
+  }, [onFilesSelected, onPathsSelected, lastOpenRef]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragging(false);
+      const now = Date.now();
+      if (now - lastOpenRef.current < 300) return;
+      lastOpenRef.current = now;
       const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) onFilesSelected(files);
     },
-    [onFilesSelected]
+    [onFilesSelected, lastOpenRef]
   );
 
   const handlePick = useCallback(async () => {

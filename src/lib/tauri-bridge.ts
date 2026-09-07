@@ -62,6 +62,18 @@ export async function checkFirewall(): Promise<string> {
   return invoke("check_firewall");
 }
 
+export async function pingPeer(ip: string, port: number): Promise<number> {
+  return invoke<number>("ping_peer", { ip, port });
+}
+
+export async function connectByIp(ip: string, port: number): Promise<PeerDiscoveredEvent> {
+  return invoke<PeerDiscoveredEvent>("connect_by_ip", { ip, port });
+}
+
+export async function rescanPeers(): Promise<void> {
+  return invoke("rescan_peers");
+}
+
 // ============ DIALOG HELPERS ============
 
 export async function pickFolder(): Promise<string | null> {
