@@ -21,7 +21,8 @@ jobs:
       - run: cargo check --workspace --all-targets
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      - run: cargo audit || true
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
 
   frontend:
     runs-on: ubuntu-22.04
