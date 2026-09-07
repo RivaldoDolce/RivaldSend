@@ -76,8 +76,15 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+@media (max-width: 1024px) {
+  .app-aurora::before { display: none; }
+  .rivaldsend-dropzone:hover { transform: none; }
+  .card-premium:hover { transform: none; box-shadow: var(--shadow-sm); }
+  .glass { backdrop-filter: none; background: var(--surface); }
+  header { backdrop-filter: none !important; background: var(--surface) !important; }
+}
 @media (max-width: 820px) {
-  .app-aurora::before { background-size: 600px; background-position: center 12%; }
+  .app-aurora::before { display: none; }
 }
 
 html, body { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -97,7 +104,7 @@ button, input, select, textarea { font-family: inherit; }
   transform: translateY(-2px) scale(1.01);
 }
 
-.card-premium { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); transition: border-color .2s, background-color .2s; }
+.card-premium { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); transition: border-color .2s, background-color .2s; contain: layout style; }
 .card-premium:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }
 
 .shimmer { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); background-size: 200% 100%; animation: shimmer 1.5s infinite; }

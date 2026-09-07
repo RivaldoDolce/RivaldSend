@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { Upload, ShieldCheck, FolderOpen, FileText, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { pickFiles } from "../lib/tauri-bridge";
+import { pickFiles, pickFolder } from "../lib/tauri-bridge";
 import { usePeersStore } from "../stores/usePeersStore";
 
 interface Props {
@@ -59,6 +59,12 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
     }
   }, [onFilesSelected, onPathsSelected]);
 
+  const handlePickFolder = useCallback(async () => {
+    const folder = await pickFolder();
+    if (folder && onPathsSelected) onPathsSelected([folder]);
+    else if (folder) onFilesSelected([{ name: folder.split("/").pop() ?? folder, size: 0 } as unknown as File]);
+  }, [onFilesSelected, onPathsSelected]);
+
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files ? Array.from(e.target.files) : [];
@@ -113,10 +119,12 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
             <Upload className="h-4 w-4" />
             {t("selectFiles")}
           </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-sm font-medium hover:bg-[var(--surface-hover)]">
+          <button type="button" onClick={handlePickFolder} className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-sm font-medium hover:bg-[var(--surface-hover)]">
             <FolderOpen className="h-4 w-4" />
             Dossier
-            <input type="file" multiple className="hidden" onChange={handleInput} /* webkitdirectory not yet */ />
+          </button>
+          <label className="hidden">
+            <input type="file" multiple className="hidden" onChange={handleInput} />
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
