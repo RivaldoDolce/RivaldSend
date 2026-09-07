@@ -20,10 +20,10 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
 
   const handleSend = useCallback(async () => {
     if (!selectedPeer) return;
-    const transferId = crypto.randomUUID();
+    const pendingTransferId = crypto.randomUUID();
     const transfer = {
-      id: transferId,
-      files: pendingFiles.map((f) => ({ path: f.path, size: f.size, blake3: "0".repeat(64) })),
+      id: pendingTransferId,
+      files: pendingFiles.map((f) => ({ path: f.path.split(/[\\/]/).pop() ?? f.path, size: f.size, blake3: "0".repeat(64) })),
       totalBytes: totalSize,
       bytesDone: 0,
       speedBps: 0,
@@ -34,21 +34,22 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
     };
     addTransfer(transfer);
     onClose();
-
     try {
-      await startTransfer({
+      const res = await startTransfer({
         peerId: selectedPeer.id,
         filePaths: pendingFiles.map((f) => f.path),
       });
-      toast.success("Transfert demarre", `Envoi vers ${selectedPeer.name}`);
+      const realId = (res as { transferId?: string; transfer_id?: string })?.transferId ?? (res as { transfer_id?: string })?.transfer_id ?? pendingTransferId;
+      if (realId !== pendingTransferId) {
+        useTransfersStore.getState().removeTransfer(pendingTransferId);
+        useTransfersStore.getState().addTransfer({ ...transfer, id: realId });
+      }
+      toast.success("Transfert démarré", `Envoi vers ${selectedPeer.name}`);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : String(err ?? "Erreur inconnue");
+      const message = err instanceof Error ? err.message : String(err ?? "Erreur inconnue");
       console.error("[SendModal] startTransfer failed:", err);
-      useTransfersStore
-        .getState()
-        .updateTransfer(transferId, { status: "failed", error: message });
-      toast.error("Echec du demarrage", "Impossible de contacter l'appareil");
+      useTransfersStore.getState().updateTransfer(pendingTransferId, { status: "failed", error: message });
+      toast.error("Échec du démarrage", "Impossible de contacter l'appareil");
     }
   }, [selectedPeer, pendingFiles, totalSize, addTransfer, onClose, toast]);
 

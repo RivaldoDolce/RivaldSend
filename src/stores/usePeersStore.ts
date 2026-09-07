@@ -28,7 +28,26 @@ export const usePeersStore = create<PeersState>()(
     setPeers: (peers) => set({ peers }),
     addPeer: (peer) =>
       set((s) => {
-        if (s.peers.some((p) => p.id === peer.id)) return s;
+        const dupIdx = s.peers.findIndex(
+          (p) => p.id === peer.id || (p.ip === peer.ip && p.port === peer.port)
+        );
+        if (dupIdx !== -1) {
+          const existing = s.peers[dupIdx]!;
+          const isGeneric = peer.name === `Appareil ${peer.ip}` || peer.name.startsWith("iface-");
+          const merged: Peer = {
+            ...existing,
+            ...peer,
+            name: !isGeneric && existing.name.startsWith("Appareil ") ? peer.name : existing.name || peer.name,
+            fingerprint: peer.fingerprint || existing.fingerprint,
+            fingerprintShort: peer.fingerprintShort || existing.fingerprintShort,
+            trusted: peer.trusted || existing.trusted,
+            latencyMs: peer.latencyMs ?? existing.latencyMs,
+          };
+          if (JSON.stringify(merged) === JSON.stringify(existing)) return s;
+          const next = [...s.peers];
+          next[dupIdx] = merged;
+          return { peers: next };
+        }
         return { peers: [...s.peers, peer] };
       }),
     removePeer: (id) =>

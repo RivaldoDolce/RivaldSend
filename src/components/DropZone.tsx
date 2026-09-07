@@ -35,10 +35,7 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
           if (now - lastOpenRef.current < 300) return;
           lastOpenRef.current = now;
           if (onPathsSelected) onPathsSelected(paths);
-          else {
-            const fakeFiles = paths.map((p) => ({ name: p.split(/[\\/]/).pop() ?? p, size: 0 } as unknown as File));
-            onFilesSelected(fakeFiles);
-          }
+          else onFilesSelected([]);
         } else setDragging(false);
       }).then((fn) => { unlisten = fn; }).catch(() => {});
     }).catch(() => {});
