@@ -1,22 +1,67 @@
 use serde::Serialize;
 use uuid::Uuid;
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceInfoResponse {
     pub name: String,
+    pub ip: String,
     pub fingerprint: String,
+    pub fingerprint_short: String,
+    pub port: u16,
 }
 #[tauri::command]
 pub fn get_device_info() -> DeviceInfoResponse {
-    DeviceInfoResponse { name: "RivaldSend".into(), fingerprint: String::new() }
+    let ip = rivaldsend_core::discovery::list_interfaces()
+        .into_iter()
+        .find(|(_, ip)| ip.is_ipv4())
+        .map(|(_, ip)| ip.to_string())
+        .unwrap_or_else(|| "127.0.0.1".into());
+    DeviceInfoResponse { name: "RivaldSend".into(), ip, fingerprint: String::new(), fingerprint_short: String::new(), port: 53317 }
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartTransferResponse {
+    pub transfer_id: String,
+}
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn start_transfer(peerId: String, filePaths: Vec<String>) -> Result<StartTransferResponse, String> {
+    let _ = (peerId, filePaths);
+    Ok(StartTransferResponse { transfer_id: Uuid::new_v4().to_string() })
+}
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn cancel_transfer(transferId: String) -> Result<(), String> {
+    let _ = transferId;
+    Ok(())
+}
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn pause_transfer(transferId: String) -> Result<(), String> {
+    let _ = transferId;
+    Ok(())
+}
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn resume_transfer(transferId: String) -> Result<(), String> {
+    let _ = transferId;
+    Ok(())
+}
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn accept_incoming(requestId: String, targetDir: String) -> Result<(), String> {
+    let _ = (requestId, targetDir);
+    Ok(())
+}
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn reject_incoming(requestId: String) -> Result<(), String> {
+    let _ = requestId;
+    Ok(())
 }
 #[tauri::command]
 pub fn open_file_dialog() -> Option<Vec<String>> {
     None
-}
-#[tauri::command]
-pub async fn start_transfer(path: String) -> Result<String, String> {
-    let _ = path;
-    Ok(Uuid::new_v4().to_string())
 }
 #[tauri::command]
 pub async fn list_history(history_path: Option<String>) -> Result<Vec<rivaldsend_core::history::HistoryEntry>, String> {
@@ -24,10 +69,11 @@ pub async fn list_history(history_path: Option<String>) -> Result<Vec<rivaldsend
     rivaldsend_core::history::load_all(std::path::Path::new(&p)).await.map_err(|e| e.to_string())
 }
 
+#[allow(non_snake_case)]
 #[tauri::command]
-pub fn generate_pairing_qr(ip: String, port: u16, code: String, fingerprint_short: String) -> Result<String, String> {
+pub fn generate_pairing_qr(ip: String, port: u16, code: String, fingerprintShort: String) -> Result<String, String> {
     use qrcode::QrCode;
-    let payload = format!("rivaldsend://{}:{}?code={}&fp={}", ip, port, code, fingerprint_short);
+    let payload = format!("rivaldsend://{}:{}?code={}&fp={}", ip, port, code, fingerprintShort);
     let qr = QrCode::new(payload.as_bytes()).map_err(|e| e.to_string())?;
     let svg = qr.render::<qrcode::render::svg::Color<'_>>().min_dimensions(200, 200).build();
     Ok(svg)

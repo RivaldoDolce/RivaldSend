@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Package, Users, Lock, ChevronRight, ChevronLeft } from "lucide-react";
-import { useSettingsStore } from "../stores/useSettingsStore";
 
 const STEPS = [
   {
@@ -32,8 +31,8 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
   const current = STEPS[step]!;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--background)] flex flex-col items-center justify-center p-8">
-      <div className="text-center max-w-md">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(rgba(9,9,11,.55), rgba(9,9,11,.85)), url(/assets/onboarding-bg.webp)` }}>
+      <div className="text-center max-w-md rounded-[24px] border border-white/10 bg-white/90 dark:bg-zinc-900/80 p-8 shadow-xl backdrop-blur">
         <div
           className="w-24 h-24 mx-auto mb-8 rounded-[28px] flex items-center justify-center"
           style={{ backgroundColor: `${current.color}15` }}
@@ -44,10 +43,10 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
             strokeWidth={1.5}
           />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">
+        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">
           {current.title}
         </h1>
-        <p className="mt-4 text-[var(--text-secondary)] leading-relaxed">
+        <p className="mt-4 leading-relaxed text-zinc-600 dark:text-zinc-400">
           {current.description}
         </p>
       </div>

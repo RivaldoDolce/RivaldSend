@@ -12,13 +12,13 @@
   --text-primary: #0A0A0A;
   --text-secondary: #6B6B6B;
   --text-tertiary: #9A9A9A;
-  --accent: #0066FF;
-  --accent-hover: #0052CC;
-  --accent-light: #EFF4FF;
-  --accent-ring: #0066FF33;
-  --success: #00A86B;
-  --warning: #FF8C00;
-  --error: #E63946;
+  --accent: #0A84FF;
+  --accent-hover: #0066CC;
+  --accent-light: #E8F2FF;
+  --accent-ring: #0A84FF33;
+  --success: #30D158;
+  --warning: #FF9F0A;
+  --error: #FF453A;
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.04);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
@@ -27,25 +27,40 @@
 }
 
 .dark {
-  --background: #09090B;
-  --surface: #18181B;
-  --surface-hover: #232326;
-  --surface-elevated: #1F1F23;
-  --border: #27272A;
-  --border-strong: #3F3F46;
+  --background: #0B0D12;
+  --surface: #1C1C1E;
+  --surface-hover: #2C2C2E;
+  --surface-elevated: #252527;
+  --border: #2C2C2E;
+  --border-strong: #3A3A3C;
   --text-primary: #FAFAFA;
   --text-secondary: #A1A1AA;
   --text-tertiary: #71717A;
-  --accent: #3B82F6;
-  --accent-hover: #60A5FA;
-  --accent-light: #1E293B;
-  --accent-ring: #3B82F633;
+  --accent: #0A84FF;
+  --accent-hover: #409CFF;
+  --accent-light: #1A2A44;
+  --accent-ring: #0A84FF33;
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.4);
 }
 
-* { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.app-aurora {
+  background:
+    radial-gradient(600px 400px at 20% 10%, rgba(10,132,255,0.08), transparent 60%),
+    radial-gradient(700px 500px at 80% 20%, rgba(94,92,230,0.07), transparent 60%),
+    radial-gradient(800px 600px at 50% 100%, rgba(48,209,88,0.05), transparent 60%),
+    var(--background);
+}
+.dark .app-aurora {
+  background:
+    radial-gradient(600px 400px at 20% 10%, rgba(10,132,255,0.12), transparent 60%),
+    radial-gradient(700px 500px at 80% 20%, rgba(94,92,230,0.10), transparent 60%),
+    var(--background);
+}
+
+html, body { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font-family: inherit; }
 .mono { font-family: 'JetBrains Mono', monospace; }
 
 .rivaldsend-dropzone {

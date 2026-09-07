@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, memo } from "react";
 import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox, Wifi, Pause, X, FileText } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { cancelTransfer, pauseTransfer, resumeTransfer } from "./lib/tauri-bridge";
+import { checkFirewall } from "./lib/tauri-bridge";
 import { DropZone } from "./components/DropZone";
 import { PeerList } from "./components/PeerList";
-import { ProgressView } from "./components/ProgressView";
 import { PairingView } from "./components/PairingView";
 import { DiscoveryView } from "./components/DiscoveryView";
 import { HistoryView } from "./components/HistoryView";
@@ -12,12 +12,14 @@ import { SendModal } from "./components/SendModal";
 import { Onboarding } from "./components/Onboarding";
 import { IncomingRequestToast } from "./components/IncomingRequestToast";
 import { ToastProvider } from "./components/toast/Toast";
+import { StatusBar } from "./components/StatusBar";
 import { useNavStore } from "./stores/useNavStore";
 import { usePeersStore } from "./stores/usePeersStore";
 import { useTransfersStore } from "./stores/useTransfersStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useTauriEvents } from "./hooks/useTauriEvents";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useDeviceContext } from "./hooks/useDeviceContext";
 import "./i18n";
 
 const APP_VERSION = "0.3.0";
@@ -33,7 +35,7 @@ const SidebarNav = memo(function SidebarNav() {
     { id: "settings", label: "Parametres", icon: Settings },
   ] as const;
   return (
-    <nav className="hidden lg:flex lg:flex-col gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-sm">
+    <nav className="flex flex-col gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-2 shadow-sm">
       {items.map((item) => {
         const active = view === item.id;
         return (
@@ -61,7 +63,7 @@ const MobileBottomNav = memo(function MobileBottomNav() {
     { id: "settings", label: "Param.", icon: Settings },
   ] as const;
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--surface)]/95 safe-area-bottom">
+    <nav className="fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--surface)]/95 safe-area-bottom">
       <div className="mx-auto grid max-w-md grid-cols-4 gap-1 px-2 py-2">
         {tabs.map((t) => {
           const active = mobileTab === t.id;
@@ -78,18 +80,20 @@ const MobileBottomNav = memo(function MobileBottomNav() {
 
 const TransferThreePane = memo(function TransferThreePane({
   onFiles,
-  hasFiles,
+  onPaths,
+  _hasFiles,
 }: {
   onFiles: (f: File[]) => void;
-  hasFiles: boolean;
+  onPaths: (paths: string[]) => void;
+  _hasFiles: boolean;
 }) {
   const selectedTransferId = useTransfersStore((s) => s.selectedTransferId);
   const transfers = useTransfersStore((s) => s.transfers);
-  const peers = usePeersStore((s) => s.peers);
   const selectTransfer = useTransfersStore((s) => s.selectTransfer);
   const selected = transfers.find((t) => t.id === selectedTransferId);
+  const { isNarrow } = useDeviceContext();
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_320px] gap-6">
+    <div className={`grid gap-6 ${isNarrow ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_320px]"}`}>
       <div className="space-y-4">
         <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center justify-between px-2 py-1">
@@ -102,7 +106,7 @@ const TransferThreePane = memo(function TransferThreePane({
       </div>
 
       <div className="space-y-4 min-w-0">
-        <DropZone onFilesSelected={onFiles} />
+        <DropZone onFilesSelected={onFiles} onPathsSelected={onPaths} />
         {transfers.length > 0 ? (
           <div className="space-y-3">
             {transfers.map((tr) => {
@@ -129,13 +133,13 @@ const TransferThreePane = memo(function TransferThreePane({
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-[var(--text-secondary)]">{(tr.speedBps / 1024 / 1024).toFixed(1)} MB/s</span>
                       {isActive && (
-                        <div className="flex gap-1">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
+                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button aria-label="Pause" onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
                             <Pause className="h-3 w-3" />
-                          </span>
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
+                          </button>
+                          <button aria-label="Annuler" onClick={() => cancelTransfer(tr.id).catch(console.error)} className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
                             <X className="h-3 w-3" />
-                          </span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -166,10 +170,16 @@ const TransferThreePane = memo(function TransferThreePane({
                 <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Integrite</span><span className="text-emerald-600">BLAKE3</span></div>
               </div>
               <div className="mt-4 flex gap-2">
-                <button className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]">
-                  <Pause className="mr-1 inline h-3 w-3" /> Pause
-                </button>
-                <button className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--error)] hover:bg-red-50">
+                {selected.status === "paused" ? (
+                  <button onClick={() => resumeTransfer(selected.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]">
+                    Reprendre
+                  </button>
+                ) : (
+                  <button onClick={() => pauseTransfer(selected.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]">
+                    <Pause className="mr-1 inline h-3 w-3" /> Pause
+                  </button>
+                )}
+                <button onClick={() => cancelTransfer(selected.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--error)] hover:bg-red-50">
                   <X className="mr-1 inline h-3 w-3" /> Annuler
                 </button>
               </div>
@@ -203,7 +213,7 @@ function AppInner() {
   }, [darkMode]);
 
   useEffect(() => {
-    invoke<string>("check_firewall").catch((err) => {
+    checkFirewall().catch((err) => {
       console.warn("[firewall] check unavailable:", err);
     });
   }, []);
@@ -216,21 +226,31 @@ function AppInner() {
     []
   );
 
+  const handlePaths = useCallback(
+    (paths: string[]) => {
+      setHasFiles(true);
+      usePeersStore.getState().openSendModal(paths.map((p) => ({ path: p, size: 0 })));
+    },
+    []
+  );
+
   const handleOnboardingComplete = useCallback(() => {
     localStorage.setItem("rivaldsend-onboarded", "1");
     setShowOnboarding(false);
   }, []);
+
+  const { isMobile } = useDeviceContext();
 
   if (showOnboarding) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] antialiased">
-      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]">
+    <div className="min-h-screen app-aurora text-[var(--text-primary)] antialiased">
+      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/70">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between px-4 sm:px-6 py-3.5">
           <div className="flex items-center gap-3">
-            <img src={darkMode ? "/assets/Images/symbol-on-dark.png" : "/assets/Images/symbol-on-light.png"} alt="RivaldSend" width="36" height="36" decoding="async" className="h-9 w-9 rounded-xl bg-white p-1.5 shadow-sm object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+            <img src={darkMode ? "/assets/symbol-on-dark.webp" : "/assets/symbol-on-light.webp"} alt="RivaldSend" width="36" height="36" decoding="async" className="h-9 w-9 rounded-xl bg-white p-1.5 shadow-sm object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
             <div>
               <p className="text-[15px] font-extrabold tracking-tight leading-none">RivaldSend</p>
               <p className="hidden sm:block text-xs font-medium text-[var(--text-secondary)]">Pro · Réactive</p>
@@ -254,32 +274,36 @@ function AppInner() {
       </header>
 
       <div className="mx-auto max-w-[1280px] px-4 sm:px-6 py-6">
-        <div className="hidden lg:grid lg:grid-cols-[240px_minmax(0,1fr)] gap-6">
-          <SidebarNav />
-          <main className="min-w-0">
-            {view === "transfer" && <TransferThreePane onFiles={handleFiles} hasFiles={hasFiles} />}
-            {view === "discovery" && <div className="fade-in max-w-3xl"><DiscoveryView /></div>}
-            {view === "pairing" && <div className="fade-in max-w-3xl"><PairingView /></div>}
-            {view === "history" && <div className="fade-in max-w-3xl"><HistoryView /></div>}
-            {view === "settings" && <div className="fade-in max-w-3xl"><SettingsView /></div>}
-          </main>
-        </div>
-
-        <div className="lg:hidden space-y-4 pb-20">
-          {mobileTab === "home" && <TransferThreePane onFiles={handleFiles} hasFiles={hasFiles} />}
-          {mobileTab === "send" && <div className="fade-in"><HistoryView direction="sent" /></div>}
-          {mobileTab === "received" && <div className="fade-in"><HistoryView direction="received" /></div>}
-          {mobileTab === "settings" && <div className="fade-in"><SettingsView /></div>}
-        </div>
+        {isMobile ? (
+          <div className="space-y-4 pb-20">
+            {mobileTab === "home" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} _hasFiles={hasFiles} />}
+            {mobileTab === "send" && <div className="fade-in"><HistoryView direction="sent" /></div>}
+            {mobileTab === "received" && <div className="fade-in"><HistoryView direction="received" /></div>}
+            {mobileTab === "settings" && <div className="fade-in"><SettingsView /></div>}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
+            <SidebarNav />
+            <main className="min-w-0">
+              {view === "transfer" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} _hasFiles={hasFiles} />}
+              {view === "discovery" && <div className="fade-in max-w-3xl"><DiscoveryView /></div>}
+              {view === "pairing" && <div className="fade-in max-w-3xl"><PairingView /></div>}
+              {view === "history" && <div className="fade-in max-w-3xl"><HistoryView /></div>}
+              {view === "settings" && <div className="fade-in max-w-3xl"><SettingsView /></div>}
+            </main>
+          </div>
+        )}
       </div>
 
-      <MobileBottomNav />
+      {isMobile && <MobileBottomNav />}
       <SendModal />
       <IncomingRequestToast />
 
-      <footer className="hidden lg:block border-t border-[var(--border)] py-4 text-center text-xs text-[var(--text-tertiary)]">
-        RivaldSend v{APP_VERSION}
-      </footer>
+      {!isMobile ? <StatusBar /> : (
+        <footer className="border-t border-[var(--border)] py-3 text-center text-xs text-[var(--text-tertiary)] pb-[env(safe-area-inset-bottom)]">
+          RivaldSend v{APP_VERSION}
+        </footer>
+      )}
     </div>
   );
 }

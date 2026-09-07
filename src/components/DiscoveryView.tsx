@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Wifi, MonitorSmartphone, Smartphone, Globe } from "lucide-react";
+import { Search, Wifi, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar } from "lucide-react";
 import { usePeersStore } from "../stores/usePeersStore";
 import type { Peer, PeerPlatform } from "../types";
 
@@ -41,7 +41,7 @@ function PlatformIcon({ platform }: { platform: PeerPlatform }) {
   }
 }
 
-function Radar() {
+function RadarView() {
   return (
     <div className="radar mx-auto" aria-label="Recherche en cours">
       <span className="sr-only">Scan reseau en cours</span>
@@ -89,8 +89,18 @@ function ManualConnectRow() {
 export function DiscoveryView() {
   const peers = usePeersStore((s) => s.peers);
   const isDiscovering = usePeersStore((s) => s.isDiscovering);
+  const setDiscovering = usePeersStore((s) => s.setDiscovering);
   const [query, setQuery] = useState("");
   const q = useDebouncedValue(query, 120);
+
+  const handleScan = useCallback(() => {
+    setDiscovering(true);
+    window.setTimeout(() => setDiscovering(false), 2500);
+  }, [setDiscovering]);
+
+  useEffect(() => {
+    handleScan();
+  }, [handleScan]);
 
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
@@ -107,6 +117,15 @@ export function DiscoveryView() {
 
   return (
     <div className="space-y-4">
+      <button
+        onClick={handleScan}
+        disabled={isDiscovering}
+        className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-white shadow-md hover:bg-[var(--accent-hover)] disabled:opacity-60"
+      >
+        {isDiscovering ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
+        {isDiscovering ? "Recherche en cours..." : "Rechercher des appareils à proximité"}
+      </button>
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
         <input
@@ -117,7 +136,7 @@ export function DiscoveryView() {
         />
       </div>
 
-      {isDiscovering && peers.length === 0 && <Radar />}
+      {isDiscovering && peers.length === 0 && <RadarView />}
 
       <div className="space-y-3">
         {filtered.map((p) => (

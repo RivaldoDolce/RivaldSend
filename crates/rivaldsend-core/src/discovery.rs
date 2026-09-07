@@ -31,6 +31,7 @@ impl Discovery {
             ("protocol_version".into(), protocol_version.into()),
             ("device_name".into(), device_name.into()),
             ("fingerprint_short".into(), fingerprint_short.into()),
+            ("platform".into(), std::env::consts::OS.into()),
         ]);
         let info = ServiceInfo::new(SERVICE_TYPE, &instance, &host, "", port, props).map_err(|e| CoreError::IoString(e.to_string()))?;
         self.daemon.register(info.clone()).map_err(|e| CoreError::IoString(e.to_string()))?;

@@ -10,8 +10,7 @@ export interface DeviceContext {
 }
 
 function sniff() {
-  const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const isTouch = coarse || navigator.maxTouchPoints > 0;
+  const isTouch = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   const isNarrow = window.innerWidth < 820;
   const uaMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
   return { isTouch, isNarrow, uaMobile };
@@ -23,26 +22,24 @@ export function useDeviceContext(): DeviceContext {
     return {
       os: "unknown",
       isMobileOS: s.uaMobile,
-      isMobile: s.uaMobile || (s.isTouch && s.isNarrow),
+      isTouch: s.isTouch,
+      isNarrow: s.isNarrow,
+      isMobile: s.uaMobile,
       lowEnd: navigator.hardwareConcurrency <= 4,
-      ...s,
     };
   });
 
   useEffect(() => {
     let alive = true;
+    let tauriResolved = false;
 
     import("@tauri-apps/plugin-os")
       .then(({ platform }) => {
         if (!alive) return;
+        tauriResolved = true;
         const os = platform();
         const isMobileOS = os === "android" || os === "ios";
-        setCtx((c) => ({
-          ...c,
-          os,
-          isMobileOS,
-          isMobile: isMobileOS || (c.isTouch && c.isNarrow),
-        }));
+        setCtx((c) => ({ ...c, os, isMobileOS, isMobile: isMobileOS }));
       })
       .catch(() => {});
 
@@ -51,11 +48,13 @@ export function useDeviceContext(): DeviceContext {
       clearTimeout(t);
       t = setTimeout(() => {
         const s = sniff();
-        setCtx((c) => ({
-          ...c,
-          ...s,
-          isMobile: c.isMobileOS || (s.isTouch && s.isNarrow),
-        }));
+        setCtx((c) => {
+          if (tauriResolved) {
+            return { ...c, isTouch: s.isTouch, isNarrow: s.isNarrow };
+          }
+          const fallbackMobile = s.uaMobile || (s.isTouch && s.isNarrow);
+          return { ...c, isTouch: s.isTouch, isNarrow: s.isNarrow, isMobileOS: s.uaMobile, isMobile: fallbackMobile };
+        });
       }, 150);
     };
     window.addEventListener("resize", onResize);

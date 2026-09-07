@@ -1,4 +1,4 @@
-import { MonitorSmartphone, Smartphone, ShieldCheck, ShieldAlert, Search } from "lucide-react";
+import { MonitorSmartphone, Smartphone, ShieldCheck, ShieldAlert, Search, Globe } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePeersStore } from "../stores/usePeersStore";
 
@@ -12,7 +12,7 @@ export function PeerList() {
     return (
       <div className="card-premium flex flex-col items-center justify-center rounded-[24px] p-8 text-center">
         <div className="relative">
-          <img src="/assets/Images/empty-no-peers.png" alt="" width="112" height="112" decoding="async" loading="lazy" className="h-28 w-28 object-contain opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+          <img src="/assets/empty-no-peers.webp" alt="" width="112" height="112" decoding="async" loading="lazy" className="h-28 w-28 object-contain opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
           <div className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-600">
             <Search className="h-4 w-4" />
           </div>
@@ -42,7 +42,7 @@ export function PeerList() {
             >
               {active && <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
               <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] border ${active ? "bg-white border-[var(--accent)]/20 text-[var(--accent)]" : "bg-[var(--surface-hover)] border-[var(--border)] text-[var(--text-secondary)] group-hover:bg-white"}`}>
-                {p.name.includes("Mac") ? <MonitorSmartphone className="h-6 w-6" strokeWidth={1.5} /> : <Smartphone className="h-6 w-6" strokeWidth={1.5} />}
+                {p.platform === "android" || p.platform === "ios" ? <Smartphone className="h-6 w-6" strokeWidth={1.5} /> : p.platform === "unknown" ? <Globe className="h-6 w-6" strokeWidth={1.5} /> : <MonitorSmartphone className="h-6 w-6" strokeWidth={1.5} />}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{p.name}</p>

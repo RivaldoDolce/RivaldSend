@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { usePeersStore } from "../stores/usePeersStore";
 import { useTransfersStore } from "../stores/useTransfersStore";
 import { useNavStore } from "../stores/useNavStore";
@@ -95,10 +95,10 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
               className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all ${active ? "border-[var(--accent)] bg-[var(--accent-light)]" : "border-[var(--border)] hover:border-[var(--accent)]/30"}`}
             >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-hover)]">
-                {p.name.includes("Mac") ? (
-                  <MonitorSmartphone className="h-5 w-5" strokeWidth={1.5} />
-                ) : (
+                {p.platform === "android" || p.platform === "ios" ? (
                   <Smartphone className="h-5 w-5" strokeWidth={1.5} />
+                ) : (
+                  <MonitorSmartphone className="h-5 w-5" strokeWidth={1.5} />
                 )}
               </div>
               <div className="min-w-0 flex-1">

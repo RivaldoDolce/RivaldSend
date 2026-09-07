@@ -17,7 +17,7 @@ import { pushProgress } from "../stores/useProgressStore";
 import { useHistoryStore } from "../stores/useHistoryStore";
 import { useIncomingStore } from "../stores/useIncomingStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
-import type { Peer, PeerPlatform } from "../types";
+import type { Peer } from "../types";
 
 export function useTauriEvents() {
   const addPeer = usePeersStore((s) => s.addPeer);
