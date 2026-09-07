@@ -68,13 +68,14 @@ const MobileBottomNav = memo(function MobileBottomNav() {
   const setMobileTab = useNavStore((s) => s.setMobileTab);
   const tabs = [
     { id: "home", label: "Accueil", icon: Home },
+    { id: "discovery", label: "Découverte", icon: Wifi },
     { id: "send", label: "Envoyer", icon: Send },
     { id: "received", label: "Reçus", icon: Inbox },
     { id: "settings", label: "Param.", icon: Settings },
   ] as const;
   return (
     <nav className="fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--surface)]/95 safe-area-bottom">
-      <div className="mx-auto grid max-w-md grid-cols-4 gap-1 px-2 py-2">
+      <div className="mx-auto grid max-w-md grid-cols-5 gap-1 px-2 py-2">
         {tabs.map((t) => {
           const active = mobileTab === t.id;
           return (
@@ -139,7 +140,7 @@ const TransferDetails = memo(function TransferDetails({ id }: { id: string }) {
   const etaSecs = prog?.etaSecs ?? tr.etaSecs;
   const bytesDone = prog?.bytesDone ?? tr.bytesDone;
   const chunksTotal = Math.ceil(tr.totalBytes / (4 * 1024 * 1024)) || 1;
-  const chunksDone = Math.floor((bytesDone / Math.max(1, tr.totalBytes)) * chunksTotal);
+  const chunksDone = Math.min(chunksTotal, Math.ceil(bytesDone / (4 * 1024 * 1024)));
   return (
     <>
       <div className="flex items-center justify-between">
@@ -150,7 +151,7 @@ const TransferDetails = memo(function TransferDetails({ id }: { id: string }) {
         <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Vitesse</span><span className="font-medium">{(speedBps / 1024 / 1024).toFixed(1)} Mo/s</span></div>
         <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Temps restant</span><span className="font-medium">{formatEta(etaSecs)}</span></div>
         <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chunks</span><span className="font-medium">{chunksDone} / {chunksTotal}</span></div>
-        <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chiffrement</span><span className="text-emerald-600">TLS 1.3 · BLAKE3</span></div>
+        <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Chiffrement</span><span className="text-emerald-600 dark:text-emerald-400">TLS 1.3 · BLAKE3</span></div>
       </div>
       <div className="mt-4 flex gap-2">
         {tr.status === "paused" ? (
@@ -158,46 +159,51 @@ const TransferDetails = memo(function TransferDetails({ id }: { id: string }) {
         ) : (
           <button onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium hover:bg-[var(--surface-hover)]"><Pause className="mr-1 inline h-3 w-3" /> Pause</button>
         )}
-        <button onClick={() => cancelTransfer(tr.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--error)] hover:bg-red-50"><X className="mr-1 inline h-3 w-3" /> Annuler</button>
+        <button onClick={() => cancelTransfer(tr.id).catch(console.error)} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--error)] hover:bg-red-50 dark:hover:bg-red-950/30"><X className="mr-1 inline h-3 w-3" /> Annuler</button>
       </div>
     </>
+  );
+});
+
+const LeftPane = memo(function LeftPane() {
+  const peerCount = usePeersStore((s) => s.peers.length);
+  return (
+    <div className="min-w-0 md:sticky md:top-[88px] self-start">
+      <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface)] shadow-sm overflow-hidden flex flex-col max-h-[min(72vh,640px)] md:max-h-[calc(100vh-120px)]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] shrink-0 bg-[var(--surface)]">
+          <h2 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">Appareils</h2>
+          <span className="text-xs font-medium text-[var(--text-tertiary)]">{peerCount ? `${peerCount}` : ""}</span>
+        </div>
+        <div className="p-3 overflow-hidden flex-1 min-h-0 flex flex-col">
+          <PeerList />
+        </div>
+      </div>
+    </div>
   );
 });
 
 const TransferThreePane = memo(function TransferThreePane({
   onFiles,
   onPaths,
-  _hasFiles,
 }: {
   onFiles: (f: File[]) => void;
   onPaths: (paths: string[]) => void;
-  _hasFiles: boolean;
 }) {
   const selectedTransferId = useTransfersStore((s) => s.selectedTransferId);
   const transferIds = useTransfersStore((s) => s.transfers.map((t) => t.id));
   const selectTransfer = useTransfersStore((s) => s.selectTransfer);
   const selected = transferIds.includes(selectedTransferId ?? "") ? selectedTransferId : null;
-  const { isNarrow } = useDeviceContext();
   return (
-    <div className={`grid gap-6 ${isNarrow ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_320px]"}`}>
-      <div className="space-y-4">
-        <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
-          <div className="flex items-center justify-between px-2 py-1">
-            <h2 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">Appareils</h2>
-          </div>
-          <div className="mt-3">
-            <PeerList />
-          </div>
-        </div>
-      </div>
+    <div className="grid gap-6 grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_360px] items-start">
+      <LeftPane />
 
-      <div className="space-y-4 min-w-0">
-        <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Vos fichiers ne quittent jamais votre réseau local · Chiffré de bout en bout
+      <div className="space-y-4 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 overflow-hidden">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" /> <span className="truncate">Vos fichiers ne quittent jamais votre réseau local · Chiffré de bout en bout</span>
         </div>
         <DropZone onFilesSelected={onFiles} onPathsSelected={onPaths} />
         {transferIds.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {transferIds.map((id) => (
               <TransferRowInline key={id} id={id} selectedId={selectedTransferId} onSelect={selectTransfer} />
             ))}
@@ -208,10 +214,15 @@ const TransferThreePane = memo(function TransferThreePane({
             <p className="mt-1 text-xs text-[var(--text-secondary)]">Glisse un fichier — envoi en &lt;3s</p>
           </div>
         )}
+        {selected && (
+          <div className="xl:hidden rounded-[20px] border bg-[var(--surface)] shadow-sm p-4">
+            <TransferDetails id={selected} />
+          </div>
+        )}
       </div>
 
-      <div className="space-y-4">
-        <div className={`rounded-[20px] border bg-[var(--surface)] shadow-sm ${selected ? "p-4" : "border-dashed border-[var(--border-strong)] p-6 text-center"}`}>
+      <div className="hidden xl:block min-w-0 xl:sticky xl:top-[88px] self-start space-y-4">
+        <div className={`rounded-[20px] border bg-[var(--surface)] shadow-sm overflow-hidden ${selected ? "p-4" : "border-dashed border-[var(--border-strong)] p-6 text-center"}`}>
           {selected ? (
             <TransferDetails id={selected} />
           ) : (
@@ -230,7 +241,6 @@ function AppInner() {
   const darkMode = useSettingsStore((s) => s.darkMode);
   const view = useNavStore((s) => s.view);
   const mobileTab = useNavStore((s) => s.mobileTab);
-  const [hasFiles, setHasFiles] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem("rivaldsend-onboarded");
   });
@@ -250,7 +260,6 @@ function AppInner() {
 
   const handleFiles = useCallback(
     (files: File[]) => {
-      setHasFiles(true);
       usePeersStore.getState().openSendModal(files.map((f) => ({ path: f.name, size: f.size })));
     },
     []
@@ -258,7 +267,6 @@ function AppInner() {
 
   const handlePaths = useCallback(
     (paths: string[]) => {
-      setHasFiles(true);
       usePeersStore.getState().openSendModal(paths.map((p) => ({ path: p, size: 0 })));
     },
     []
@@ -277,10 +285,10 @@ function AppInner() {
 
   return (
     <div className="min-h-screen app-aurora text-[var(--text-primary)] antialiased">
-      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/70">
+      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between px-4 sm:px-6 py-3.5">
           <div className="flex items-center gap-3">
-            <img src={darkMode ? "/assets/symbol-on-dark.webp" : "/assets/symbol-on-light.webp"} alt="RivaldSend" width="36" height="36" decoding="async" className="h-9 w-9 rounded-xl bg-white p-1.5 shadow-sm object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+            <img src={darkMode ? "/assets/symbol-on-dark.webp" : "/assets/symbol-on-light.webp"} alt="RivaldSend" width="36" height="36" decoding="async" className="h-9 w-9 rounded-xl bg-white dark:bg-zinc-800 p-1.5 shadow-sm object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
             <div>
               <p className="text-[15px] font-extrabold tracking-tight leading-none">RivaldSend</p>
               <p className="hidden sm:block text-xs font-medium text-[var(--text-secondary)]">Pro · Réactive</p>
@@ -306,7 +314,8 @@ function AppInner() {
       <div className="mx-auto max-w-[1280px] px-4 sm:px-6 py-6">
         {isMobile ? (
           <div className="space-y-4 pb-20">
-            {mobileTab === "home" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} _hasFiles={hasFiles} />}
+            {mobileTab === "home" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} />}
+            {mobileTab === "discovery" && <div className="fade-in"><DiscoveryView /></div>}
             {mobileTab === "send" && <div className="fade-in"><HistoryView direction="sent" /></div>}
             {mobileTab === "received" && <div className="fade-in"><HistoryView direction="received" /></div>}
             {mobileTab === "settings" && <div className="fade-in"><SettingsView /></div>}
@@ -317,7 +326,7 @@ function AppInner() {
               <SidebarNav />
             </div>
             <main className="min-w-0">
-              {view === "transfer" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} _hasFiles={hasFiles} />}
+              {view === "transfer" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} />}
               {view === "discovery" && <div className="fade-in max-w-3xl"><DiscoveryView /></div>}
               {view === "pairing" && <div className="fade-in max-w-3xl"><PairingView /></div>}
               {view === "history" && <div className="fade-in max-w-3xl"><HistoryView /></div>}

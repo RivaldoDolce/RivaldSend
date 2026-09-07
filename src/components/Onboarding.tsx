@@ -68,7 +68,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
         {step > 0 && (
           <button
             onClick={() => setStep(step - 1)}
-            className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-6 py-3 text-sm font-medium hover:bg-[var(--surface-hover)]"
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-6 py-3 text-sm font-medium hover:bg-[var(--surface-hover)] text-[var(--text-primary)]"
           >
             <ChevronLeft className="h-4 w-4" /> Retour
           </button>

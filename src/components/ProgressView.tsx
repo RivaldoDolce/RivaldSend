@@ -94,7 +94,7 @@ const TransferRow = memo(function TransferRow({ id }: { id: string }) {
           <Clock3 className="h-3.5 w-3.5" /> {formatEta(etaSecs)} · {formatBytes(bytesDone)} / {formatBytes(tr.totalBytes)}
         </span>
         <span className="text-[var(--text-tertiary)]">Chunks {chunksDone}/{chunks} · TLS 1.3</span>
-        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 capitalize">{tr.status}</span>
+        <span className="rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 dark:border dark:border-amber-500/30 px-2 py-0.5 text-xs font-medium capitalize">{tr.status}</span>
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ export function PeerList() {
       <div className="card-premium flex flex-col items-center justify-center rounded-[24px] p-8 text-center">
         <div className="relative">
           <img src="/assets/empty-no-peers.webp" alt="" width="112" height="112" decoding="async" loading="lazy" className="h-28 w-28 object-contain opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
-          <div className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+          <div className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/20">
             <Search className="h-4 w-4" />
           </div>
         </div>
@@ -27,30 +27,32 @@ export function PeerList() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col min-w-0 h-full flex-1 min-h-0">
+      <div className="flex items-center justify-between px-1 pb-2 shrink-0">
         <h3 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">{t("peers")} · {peers.length}</h3>
+        <span className="text-[11px] text-[var(--text-tertiary)]">{peers.length} en ligne</span>
       </div>
-      <div className="grid gap-3">
+      <div className="grid gap-2.5 overflow-y-auto overflow-x-hidden overscroll-contain flex-1 min-h-0 pr-1 -mr-1 p-1 content-start">
         {peers.map((p) => {
           const active = selectedPeerId === p.id;
           return (
             <button
               key={p.id}
               onClick={() => selectPeer(p.id)}
-              className={`group relative flex items-center gap-4 rounded-[20px] border p-4 text-left transition-all ${active ? "border-[var(--accent)] bg-[var(--accent-light)] shadow-md" : "card-premium hover:border-[var(--accent)]/30"}`}
+              className={`group relative flex items-center gap-3 rounded-[16px] border p-3 text-left transition-all min-w-0 overflow-hidden w-full ${active ? "border-[var(--accent)] bg-[var(--accent-light)] shadow-md" : "card-premium hover:border-[var(--accent)]/30"}`}
             >
-              {active && <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
-              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] border ${active ? "bg-white border-[var(--accent)]/20 text-[var(--accent)]" : "bg-[var(--surface-hover)] border-[var(--border)] text-[var(--text-secondary)] group-hover:bg-white"}`}>
-                {p.platform === "android" || p.platform === "ios" ? <Smartphone className="h-6 w-6" strokeWidth={1.5} /> : p.platform === "unknown" ? <Globe className="h-6 w-6" strokeWidth={1.5} /> : <MonitorSmartphone className="h-6 w-6" strokeWidth={1.5} />}
+              {active && <div className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-[var(--accent)]" />}
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border ${active ? "bg-white dark:bg-[var(--surface-elevated)] border-[var(--accent)]/20 text-[var(--accent)]" : "bg-[var(--surface-hover)] border-[var(--border)] text-[var(--text-secondary)] group-hover:bg-white dark:group-hover:bg-[var(--surface-elevated)]"}`}>
+                {p.platform === "android" || p.platform === "ios" ? <Smartphone className="h-5 w-5" strokeWidth={1.5} /> : p.platform === "unknown" ? <Globe className="h-5 w-5" strokeWidth={1.5} /> : <MonitorSmartphone className="h-5 w-5" strokeWidth={1.5} />}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{p.name}</p>
-                <p className="mono text-xs text-[var(--text-secondary)]">{p.ip}:{p.port} · {p.fingerprintShort} · {p.status}</p>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <p className="text-sm font-semibold text-[var(--text-primary)] truncate leading-tight">{p.name}</p>
+                <p className="mono text-[11px] leading-tight text-[var(--text-secondary)] truncate">{p.ip}:{p.port} · {p.fingerprintShort}</p>
+                <p className="text-[11px] leading-tight text-[var(--text-tertiary)] truncate capitalize">{p.status}</p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {p.trusted ? <ShieldCheck className="h-5 w-5 text-[var(--success)]" /> : <ShieldAlert className="h-5 w-5 text-amber-500" />}
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${p.trusted ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"}`}>{p.trusted ? "Pairé" : "Nouveau"}</span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                {p.trusted ? <ShieldCheck className="h-4 w-4 text-[var(--success)]" /> : <ShieldAlert className="h-4 w-4 text-amber-500" />}
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${p.trusted ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"}`}>{p.trusted ? "Pairé" : "Nouveau"}</span>
               </div>
             </button>
           );

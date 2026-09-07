@@ -20,9 +20,9 @@ function useDebouncedValue(value: string, delay: number): string {
 function LatencyBadge({ ms }: { ms?: number }) {
   if (ms === undefined) return null;
   const color =
-    ms < 20 ? "bg-emerald-100 text-emerald-700" :
-    ms < 60 ? "bg-amber-100 text-amber-700" :
-    "bg-red-100 text-red-700";
+    ms < 20 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border dark:border-emerald-500/30" :
+    ms < 60 ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 dark:border dark:border-amber-500/30" :
+    "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300 dark:border dark:border-red-500/30";
   return (
     <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold mono ${color}`}>
       {ms} ms
@@ -57,16 +57,17 @@ function usePeerLatency(ip: string, port: number) {
   const [ms, setMs] = useState<number | undefined>(undefined);
   useEffect(() => {
     let alive = true;
+    let timeout: ReturnType<typeof setTimeout>;
     const ping = async () => {
       try {
         const { pingPeer } = await import("../lib/tauri-bridge");
         const v = await pingPeer(ip, port);
         if (alive) setMs(v);
       } catch { if (alive) setMs(undefined); }
+      if (alive) timeout = setTimeout(ping, 10000);
     };
-    ping();
-    const t = setInterval(ping, 5000);
-    return () => { alive = false; clearInterval(t); };
+    timeout = setTimeout(ping, 400);
+    return () => { alive = false; clearTimeout(timeout); };
   }, [ip, port]);
   return ms;
 }
@@ -243,7 +244,7 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
     <div className="card-premium flex items-center gap-3 rounded-[20px] p-4">
       <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] border ${
         connState === "paired"
-          ? "bg-white border-[var(--accent)]/20 text-[var(--accent)]"
+          ? "bg-white dark:bg-[var(--surface-elevated)] border-[var(--accent)]/20 text-[var(--accent)]"
           : "bg-[var(--surface-hover)] border-[var(--border)] text-[var(--text-secondary)]"
       }`}>
         <PlatformIcon platform={peer.platform} />
