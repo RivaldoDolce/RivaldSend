@@ -1,9 +1,9 @@
 import { memo } from "react";
-import { Zap, Clock3, HardDrive, Pause, X } from "lucide-react";
+import { Zap, Clock3, HardDrive, Pause, Play, X } from "lucide-react";
 import { useTransfersStore } from "../stores/useTransfersStore";
 import { useProgressStore } from "../stores/useProgressStore";
 import { useDeviceContext } from "../hooks/useDeviceContext";
-import { cancelTransfer, pauseTransfer } from "../lib/tauri-bridge";
+import { cancelTransfer, pauseTransfer, resumeTransfer } from "../lib/tauri-bridge";
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} o`;
@@ -59,7 +59,11 @@ const TransferRow = memo(function TransferRow({ id }: { id: string }) {
           <p className="mt-1 text-xs text-[var(--text-tertiary)]">Chunks {chunksDone}/{chunks} · {formatEta(etaSecs)} restant · TLS 1.3</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] hover:bg-[var(--surface-hover)]" aria-label="Pause"><Pause className="h-4 w-4" /></button>
+          {tr.status === "paused" ? (
+            <button onClick={() => resumeTransfer(tr.id).catch(console.error)} className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]" aria-label="Reprendre"><Play className="h-4 w-4" /></button>
+          ) : (
+            <button onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] hover:bg-[var(--surface-hover)]" aria-label="Pause"><Pause className="h-4 w-4" /></button>
+          )}
           <button onClick={() => cancelTransfer(tr.id).catch(console.error)} className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600" aria-label="Annuler"><X className="h-4 w-4" /></button>
         </div>
         <p className="text-xs text-[var(--text-tertiary)]">🔒 Chiffré · reprise possible</p>
@@ -100,13 +104,14 @@ const TransferRow = memo(function TransferRow({ id }: { id: string }) {
   );
 });
 
-export function ProgressView() {
+export function ProgressView({ transferId }: { transferId?: string }) {
   const transferIds = useTransfersStore((s) => s.transfers.map((t) => t.id));
-  if (transferIds.length === 0) return null;
+  const ids = transferId ? transferIds.filter((id) => id === transferId) : transferIds;
+  if (ids.length === 0) return null;
   return (
     <div className="space-y-3 fade-in">
       <h3 className="text-xs font-bold tracking-widest uppercase text-[var(--text-secondary)]">Transferts en cours</h3>
-      {transferIds.map((id) => (
+      {ids.map((id) => (
         <TransferRow key={id} id={id} />
       ))}
     </div>

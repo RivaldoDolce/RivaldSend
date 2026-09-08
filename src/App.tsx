@@ -5,6 +5,7 @@ import { checkFirewall } from "./lib/tauri-bridge";
 import { useProgressStore } from "./stores/useProgressStore";
 import { DropZone } from "./components/DropZone";
 import { PeerList } from "./components/PeerList";
+import { ProgressView } from "./components/ProgressView";
 import { PairingView } from "./components/PairingView";
 import { DiscoveryView } from "./components/DiscoveryView";
 import { HistoryView } from "./components/HistoryView";
@@ -192,7 +193,9 @@ const TransferThreePane = memo(function TransferThreePane({
   const selectedTransferId = useTransfersStore((s) => s.selectedTransferId);
   const transferIds = useTransfersStore((s) => s.transfers.map((t) => t.id));
   const selectTransfer = useTransfersStore((s) => s.selectTransfer);
-  const selected = transferIds.includes(selectedTransferId ?? "") ? selectedTransferId : null;
+  const selectedTransfer = useTransfersStore((s) => s.transfers.find((t) => t.id === selectedTransferId));
+  const selected = selectedTransfer ? selectedTransfer.id : null;
+  const selectedIsActive = selectedTransfer?.status === "running" || selectedTransfer?.status === "paused";
   return (
     <div className="grid gap-6 grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_360px] items-start">
       <LeftPane />
@@ -216,7 +219,7 @@ const TransferThreePane = memo(function TransferThreePane({
         )}
         {selected && (
           <div className="xl:hidden rounded-[20px] border bg-[var(--surface)] shadow-sm p-4">
-            <TransferDetails id={selected} />
+            {selectedIsActive ? <ProgressView transferId={selected} /> : <TransferDetails id={selected} />}
           </div>
         )}
       </div>
@@ -224,7 +227,7 @@ const TransferThreePane = memo(function TransferThreePane({
       <div className="hidden xl:block min-w-0 xl:sticky xl:top-[88px] self-start space-y-4">
         <div className={`rounded-[20px] border bg-[var(--surface)] shadow-sm overflow-hidden ${selected ? "p-4" : "border-dashed border-[var(--border-strong)] p-6 text-center"}`}>
           {selected ? (
-            <TransferDetails id={selected} />
+            selectedIsActive ? <ProgressView transferId={selected} /> : <TransferDetails id={selected} />
           ) : (
             <>
               <p className="text-sm font-semibold">Aucune sélection</p>
@@ -278,6 +281,8 @@ function AppInner() {
   }, []);
 
   const { isMobile } = useDeviceContext();
+  const activeTransfer = useTransfersStore((s) => s.transfers.find((t) => t.id === s.selectedTransferId));
+  const showProgressOverlay = isMobile && !!activeTransfer && (activeTransfer.status === "running" || activeTransfer.status === "paused");
 
   if (showOnboarding) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
@@ -337,6 +342,19 @@ function AppInner() {
       </div>
 
       {isMobile && <MobileBottomNav />}
+      {showProgressOverlay && activeTransfer && (
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-[var(--background)] px-4 py-6 pb-24">
+          <div className="mx-auto max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold">Transfert en cours</h2>
+              <button onClick={() => useTransfersStore.getState().selectTransfer(null)} aria-label="Fermer" className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] hover:bg-[var(--surface-hover)]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <ProgressView transferId={activeTransfer.id} />
+          </div>
+        </div>
+      )}
       <SendModal />
       <IncomingRequestToast />
       <CommandPalette />
