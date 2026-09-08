@@ -122,7 +122,9 @@ export function useTauriEvents() {
       );
     };
 
-    const timer = window.setInterval(retryTrustedPeers, 10_000);
+    // Reconnexion douce : toutes les 30 s suffisent, les pairs sont
+    // déjà suivis en temps réel par le listener mDNS persistant.
+    const timer = window.setInterval(retryTrustedPeers, 30_000);
     return () => window.clearInterval(timer);
   }, [addPeer]);
 }

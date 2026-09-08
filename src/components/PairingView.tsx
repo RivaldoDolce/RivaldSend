@@ -93,6 +93,9 @@ export function PairingView() {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
+  // Rendu via data-URI plutôt que dangerouslySetInnerHTML (pas d'exécution de SVG)
+  const qrSrc = qrSvg ? `data:image/svg+xml;utf8,${encodeURIComponent(qrSvg)}` : '';
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="text-center">
@@ -105,10 +108,15 @@ export function PairingView() {
       <div className="grid md:grid-cols-2 gap-6">
         {/* QR Code */}
         <div className="card-premium p-6 text-center">
-          <div
-            className="inline-block p-4 bg-white rounded-2xl"
-            dangerouslySetInnerHTML={{ __html: qrSvg }}
-          />
+          <div className="inline-block p-4 bg-white rounded-2xl">
+            {qrSrc ? (
+              <img src={qrSrc} alt="QR code d'appairage" className="h-48 w-48" />
+            ) : (
+              <div className="flex h-48 w-48 items-center justify-center text-xs text-gray-500">
+                Génération…
+              </div>
+            )}
+          </div>
           <p className="mono text-2xl font-bold mt-4 tracking-widest text-[var(--text-primary)]">
             {pin}
           </p>

@@ -4,7 +4,7 @@ import { useTransfersStore } from "../stores/useTransfersStore";
 import { useProgressStore } from "../stores/useProgressStore";
 import { useDeviceContext } from "../hooks/useDeviceContext";
 import { cancelTransfer, pauseTransfer, resumeTransfer } from "../lib/tauri-bridge";
-import { formatBytes } from "../lib/utils";
+import { formatBytes, CHUNK_SIZE_BYTES } from "../lib/utils";
 
 function formatEta(secs: number): string {
   if (!secs || secs < 0) return "—";
@@ -41,7 +41,7 @@ const TransferRow = memo(function TransferRow({ id }: { id: string }) {
   const etaSecs = progress?.etaSecs ?? tr.etaSecs;
   const pct = tr.totalBytes > 0 ? (bytesDone / tr.totalBytes) * 100 : 0;
 
-  const chunks = tr.totalBytes > 0 ? Math.ceil(tr.totalBytes / (4 * 1024 * 1024)) : 0;
+  const chunks = tr.totalBytes > 0 ? Math.ceil(tr.totalBytes / CHUNK_SIZE_BYTES) : 0;
   const chunksDone = tr.totalBytes > 0 ? Math.floor((pct / 100) * chunks) : 0;
 
   if (isMobile) {

@@ -15,6 +15,7 @@ import { Onboarding } from "./components/Onboarding";
 import { IncomingRequestToast } from "./components/IncomingRequestToast";
 import { ToastProvider } from "./components/toast/Toast";
 import { StatusBar } from "./components/StatusBar";
+import { CHUNK_SIZE_BYTES } from "./lib/utils";
 import { CommandPalette } from "./components/CommandPalette";
 import { useNavStore } from "./stores/useNavStore";
 import { usePeersStore } from "./stores/usePeersStore";
@@ -140,8 +141,8 @@ const TransferDetails = memo(function TransferDetails({ id }: { id: string }) {
   const speedBps = prog?.speedBps ?? tr.speedBps;
   const etaSecs = prog?.etaSecs ?? tr.etaSecs;
   const bytesDone = prog?.bytesDone ?? tr.bytesDone;
-  const chunksTotal = Math.ceil(tr.totalBytes / (4 * 1024 * 1024)) || 1;
-  const chunksDone = Math.min(chunksTotal, Math.ceil(bytesDone / (4 * 1024 * 1024)));
+  const chunksTotal = Math.ceil(tr.totalBytes / CHUNK_SIZE_BYTES) || 1;
+  const chunksDone = Math.min(chunksTotal, Math.ceil(bytesDone / CHUNK_SIZE_BYTES));
   return (
     <>
       <div className="flex items-center justify-between">
