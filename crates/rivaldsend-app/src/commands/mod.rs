@@ -178,7 +178,12 @@ pub async fn resume_transfer(
 }
 #[allow(non_snake_case)]
 #[tauri::command]
-pub async fn accept_incoming(app: AppHandle, requestId: String, targetDir: String) -> Result<(), String> {
+pub async fn accept_incoming(
+    app: AppHandle,
+    incoming: State<'_, crate::IncomingState>,
+    requestId: String,
+    targetDir: String,
+) -> Result<(), String> {
     let dir = if targetDir == "~" || targetDir.starts_with("~/") {
         let home = dirs::download_dir().or_else(dirs::home_dir).unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
         if targetDir == "~" { home } else { home.join(targetDir.trim_start_matches("~/")) }
@@ -188,12 +193,25 @@ pub async fn accept_incoming(app: AppHandle, requestId: String, targetDir: Strin
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("incoming_accepted", serde_json::json!({"requestId": requestId, "targetDir": dir}));
+    // Dossier de staging pour les chunks de cette demande
+    let staging = dir.join(".rivaldsend-incoming").join(&requestId);
+    std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+    // Mémoriser la décision pour le pipeline de réception
+    incoming.0.lock().await.insert(requestId.clone(), crate::IncomingDecision {
+        target_dir: Some(dir.clone()),
+        decided_at: std::time::SystemTime::now(),
+    });
+    let _ = app.emit("incoming_accepted", serde_json::json!({"requestId": requestId, "targetDir": dir, "stagingDir": staging}));
     Ok(())
 }
 #[allow(non_snake_case)]
 #[tauri::command]
-pub async fn reject_incoming(app: AppHandle, requestId: String) -> Result<(), String> {
+pub async fn reject_incoming(app: AppHandle, incoming: State<'_, crate::IncomingState>, requestId: String) -> Result<(), String> {
+    // Mémoriser le refus : les chunks tardifs de cette demande seront rejetés
+    incoming.0.lock().await.insert(requestId.clone(), crate::IncomingDecision {
+        target_dir: None,
+        decided_at: std::time::SystemTime::now(),
+    });
     let _ = app.emit("incoming_rejected", serde_json::json!({"requestId": requestId}));
     Ok(())
 }

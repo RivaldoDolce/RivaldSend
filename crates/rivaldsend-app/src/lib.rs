@@ -16,6 +16,18 @@ pub struct MdnsState {
 #[derive(Clone, Default)]
 pub struct PeerCacheState(pub Arc<tokio::sync::Mutex<HashMap<String, events::PeerDiscoveredEvent>>>);
 
+/// Décision prise sur une demande entrante (acceptée → dossier cible, refusée → None).
+/// Conservée pour que le pipeline de réception sache où écrire (ou refuser) les chunks.
+#[derive(Clone, Debug)]
+pub struct IncomingDecision {
+    pub target_dir: Option<std::path::PathBuf>,
+    pub decided_at: std::time::SystemTime,
+}
+
+/// Demandes entrantes traitées, indexées par request_id
+#[derive(Clone, Default, Debug)]
+pub struct IncomingState(pub Arc<tokio::sync::Mutex<HashMap<String, IncomingDecision>>>);
+
 pub fn build_router() -> axum::Router {
     let dir = rivaldsend_core::manager::TransferManager::default_resume_dir();
     let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(dir));
@@ -73,6 +85,7 @@ pub fn run_tauri() {
         .manage(manager)
         .manage(MdnsState { daemon })
         .manage(PeerCacheState::default())
+        .manage(IncomingState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
