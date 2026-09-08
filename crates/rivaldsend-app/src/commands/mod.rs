@@ -296,58 +296,14 @@ pub async fn connect_by_ip(app: AppHandle, ip: String, port: u16) -> Result<crat
 #[tauri::command]
 pub async fn rescan_peers(
     app: AppHandle,
-    mdns: State<'_, crate::MdnsState>,  // ← daemon partagé
+    cache: State<'_, crate::PeerCacheState>,
 ) -> Result<(), String> {
-    use mdns_sd::ServiceEvent;
-
-    // Réutiliser le daemon existant (plus de création à chaque scan)
-    let receiver = mdns.daemon
-        .browse(rivaldsend_core::discovery::SERVICE_TYPE)
-        .map_err(|e| e.to_string())?;
-
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(2500);
-    let local_ip = rivaldsend_core::discovery::list_interfaces()
-        .into_iter()
-        .find(|(_, ip)| ip.is_ipv4())
-        .map(|(_, ip)| ip.to_string())
-        .unwrap_or_default();
-
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            break;
-        }
-
-        let event = match tokio::time::timeout(remaining, receiver.recv_async()).await {
-            Ok(Ok(event)) => event,
-            _ => break,
-        };
-
-        let ServiceEvent::ServiceResolved(info) = event else {
-            continue;
-        };
-
-        let Some(ip) = info.get_addresses().iter().find(|a| !a.is_loopback()) else {
-            continue;
-        };
-        let ip = ip.to_string();
-
-        // Exclure notre propre appareil (même IP locale)
-        if ip == local_ip {
-            continue;
-        }
-
-        let port = info.get_port();
-
-        let _ = app.emit("peer_discovered", crate::events::PeerDiscoveredEvent {
-            id: format!("peer-{ip}:{port}"),
-            name: info.get_property_val_str("device_name").unwrap_or(info.get_hostname()).to_string(),
-            ip,
-            port,
-            fingerprint_short: info.get_property_val_str("fingerprint_short").unwrap_or("0000").to_string(),
-            trusted: false,
-            platform: info.get_property_val_str("platform").unwrap_or("unknown").to_string(),
-        });
+    // Le browse persistant (lib.rs) maintient le cache à jour en temps réel.
+    // « Rescanner » = ré-émettre instantanément les pairs connus vers l'UI.
+    let peers: Vec<crate::events::PeerDiscoveredEvent> =
+        cache.0.lock().await.values().cloned().collect();
+    for peer in peers {
+        let _ = app.emit("peer_discovered", peer);
     }
     Ok(())
 }

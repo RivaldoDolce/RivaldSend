@@ -4,12 +4,17 @@ pub mod http;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Emitter;
+use tauri::Manager;
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 
-/// Wrapper pour partager le daemon mDNS via Tauri state
+/// Daemon mDNS partagé via l'état Tauri
 pub struct MdnsState {
     pub daemon: Arc<ServiceDaemon>,
 }
+
+/// Cache des pairs découverts par le listener mDNS persistant
+#[derive(Clone, Default)]
+pub struct PeerCacheState(pub Arc<tokio::sync::Mutex<HashMap<String, events::PeerDiscoveredEvent>>>);
 
 pub fn build_router() -> axum::Router {
     let dir = rivaldsend_core::manager::TransferManager::default_resume_dir();
@@ -26,15 +31,13 @@ pub fn run_tauri() {
         std::process::exit(1);
     }
 
-    // 1. Créer UN SEUL daemon mDNS au démarrage
-    let daemon = Arc::new(
-        ServiceDaemon::new().expect("Failed to create mDNS daemon")
-    );
+    // 1. UN SEUL daemon mDNS pour toute la vie de l'app
+    let daemon = Arc::new(ServiceDaemon::new().expect("Failed to create mDNS daemon"));
 
-    // 2. Récupérer les infos de l'appareil
+    // 2. Infos appareil
     let device_info = commands::get_device_info();
 
-    // 3. Publier le service local
+    // 3. Publication du service local
     let txt_properties: HashMap<String, String> = HashMap::from([
         ("device_name".to_string(), "RivaldSend".to_string()),
         ("platform".to_string(), std::env::consts::OS.to_string()),
@@ -54,7 +57,10 @@ pub fn run_tauri() {
     if let Err(e) = daemon.register(service_info) {
         tracing::error!("Failed to register mDNS service: {e}");
     } else {
-        tracing::info!("mDNS service registered: {} at {}:{}", device_info.name, device_info.ip, device_info.port);
+        tracing::info!(
+            "mDNS service registered: {} at {}:{}",
+            device_info.name, device_info.ip, device_info.port
+        );
     }
 
     // 4. Manager HTTP
@@ -65,7 +71,8 @@ pub fn run_tauri() {
 
     tauri::Builder::default()
         .manage(manager)
-        .manage(MdnsState { daemon }) // ← daemon partagé
+        .manage(MdnsState { daemon })
+        .manage(PeerCacheState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
@@ -73,7 +80,10 @@ pub fn run_tauri() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_os::init())
         .setup(move |app| {
-            let handle = app.handle().clone();
+            let http_handle = app.handle().clone();
+            let ev_handle = app.handle().clone();
+
+            // --- Serveur HTTP (inchangé) ---
             tauri::async_runtime::spawn(async move {
                 let router = http::router(http::AppState { manager: http_manager });
                 match tokio::net::TcpListener::bind("0.0.0.0:53317").await {
@@ -85,8 +95,74 @@ pub fn run_tauri() {
                     }
                     Err(e) => tracing::error!("failed to bind http server: {e}"),
                 }
-                let _ = handle.emit("server_ready", serde_json::json!({"port":53317}));
+                let _ = http_handle.emit("server_ready", serde_json::json!({"port":53317}));
             });
+
+            // --- Listener mDNS PERSISTANT : créé une fois, jamais droppé ---
+            let mdns = app.handle().state::<MdnsState>().inner().daemon.clone();
+            let cache = app.handle().state::<PeerCacheState>().inner().0.clone();
+
+            // Toutes nos IPs locales pour s'exclure soi-même
+            let local_ips: std::collections::HashSet<String> =
+                rivaldsend_core::discovery::list_interfaces()
+                    .into_iter()
+                    .map(|(_, ip)| ip.to_string())
+                    .collect();
+
+            // UN SEUL browse() pour toute la vie de l'app
+            let receiver = mdns
+                .browse(rivaldsend_core::discovery::SERVICE_TYPE)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            tauri::async_runtime::spawn(async move {
+                use mdns_sd::ServiceEvent;
+                loop {
+                    match receiver.recv_async().await {
+                        Ok(ServiceEvent::ServiceResolved(info)) => {
+                            let Some(ip) = info.get_addresses().iter().find(|a| !a.is_loopback()) else {
+                                continue;
+                            };
+                            let ip = ip.to_string();
+                            if local_ips.contains(&ip) {
+                                continue; // c'est nous
+                            }
+                            let port = info.get_port();
+                            let fullname = info.get_fullname().to_string();
+                            let ev = events::PeerDiscoveredEvent {
+                                id: format!("peer-{ip}:{port}"),
+                                name: info
+                                    .get_property_val_str("device_name")
+                                    .unwrap_or(info.get_hostname())
+                                    .to_string(),
+                                ip,
+                                port,
+                                fingerprint_short: info
+                                    .get_property_val_str("fingerprint_short")
+                                    .unwrap_or("0000")
+                                    .to_string(),
+                                trusted: false,
+                                platform: info
+                                    .get_property_val_str("platform")
+                                    .unwrap_or("unknown")
+                                    .to_string(),
+                            };
+                            cache.lock().await.insert(fullname, ev.clone());
+                            let _ = ev_handle.emit("peer_discovered", ev);
+                        }
+                        Ok(ServiceEvent::ServiceRemoved(_ty, fullname)) => {
+                            if let Some(ev) = cache.lock().await.remove(&fullname) {
+                                let _ = ev_handle.emit("peer_lost", serde_json::json!({ "id": ev.id }));
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::warn!("mDNS listener stopped: {e}");
+                            break;
+                        }
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
