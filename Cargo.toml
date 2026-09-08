@@ -28,3 +28,4 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.6", features = ["trace", "cors", "limit"] }
 mdns-sd = "0.11"
+hostname = "0.4"

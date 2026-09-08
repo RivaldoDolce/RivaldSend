@@ -49,10 +49,22 @@ async fn cancel_transfer(State(s): State<AppState>, Path(id): Path<String>) -> R
     s.manager.cancel(uuid).await.map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
     Ok(Json(serde_json::json!({"transfer_id": uuid, "status":"cancelled"})))
 }
+async fn get_identity() -> Json<serde_json::Value> {
+    let info = crate::commands::get_device_info();
+    Json(serde_json::json!({
+        "name": info.name,
+        "ip": info.ip,
+        "port": info.port,
+        "fingerprint": info.fingerprint,
+        "fingerprint_short": info.fingerprint_short,
+        "platform": std::env::consts::OS,
+    }))
+}
 
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health))
+        .route("/v1/identity", get(get_identity))
         .route("/v1/negotiate", post(negotiate))
         .route("/v1/transfers", post(create_transfer))
         .route("/v1/transfers/:id/chunks", put(put_chunk))

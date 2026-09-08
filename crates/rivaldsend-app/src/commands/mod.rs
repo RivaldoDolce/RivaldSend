@@ -2,6 +2,32 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 use std::sync::Arc;
+use std::sync::OnceLock;
+
+// Empreinte stable persistée
+static DEVICE_FINGERPRINT: OnceLock<String> = OnceLock::new();
+
+fn get_or_create_fingerprint() -> String {
+    DEVICE_FINGERPRINT.get_or_init(|| {
+        let path = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("rivaldsend")
+            .join("fingerprint.txt");
+
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            let trimmed = content.trim().to_string();
+            if !trimmed.is_empty() { return trimmed; }
+        }
+
+        // Générer une nouvelle empreinte (16 octets = 32 caractères hex)
+        let fingerprint = format!("{:x}", Uuid::new_v4().as_u128());
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&path, &fingerprint);
+        fingerprint
+    }).clone()
+}
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfoResponse {
@@ -18,7 +44,22 @@ pub fn get_device_info() -> DeviceInfoResponse {
         .find(|(_, ip)| ip.is_ipv4())
         .map(|(_, ip)| ip.to_string())
         .unwrap_or_else(|| "127.0.0.1".into());
-    DeviceInfoResponse { name: "RivaldSend".into(), ip, fingerprint: String::new(), fingerprint_short: String::new(), port: 53317 }
+
+    let fingerprint = get_or_create_fingerprint();
+    let fingerprint_short = fingerprint.chars().take(8).collect();
+
+    let name = hostname::get()
+        .ok()
+        .and_then(|h| h.into_string().ok())
+        .unwrap_or_else(|| "RivaldSend".into());
+
+    DeviceInfoResponse {
+        name,
+        ip,
+        fingerprint: fingerprint.clone(),
+        fingerprint_short,
+        port: 53317
+    }
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -213,15 +254,40 @@ pub async fn ping_peer(ip: String, port: u16) -> Result<u32, String> {
 #[allow(non_snake_case)]
 #[tauri::command]
 pub async fn connect_by_ip(app: AppHandle, ip: String, port: u16) -> Result<crate::events::PeerDiscoveredEvent, String> {
-    let _ = ping_peer(ip.clone(), port).await;
+    // 1. Vérifier la connectivité
+    ping_peer(ip.clone(), port).await?;
+
+    // 2. Récupérer l'identité du peer via HTTP
+    let url = format!("http://{}:{}/v1/identity", ip, port);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP error: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+
+    let identity: serde_json::Value = response.json().await
+        .map_err(|e| e.to_string())?;
+
+    let name = identity["name"].as_str().unwrap_or(&format!("Appareil {ip}")).to_string();
+    let fingerprint_short = identity["fingerprint_short"].as_str().unwrap_or("0000").to_string();
+    let platform = identity["platform"].as_str().unwrap_or("unknown").to_string();
+
     let ev = crate::events::PeerDiscoveredEvent {
         id: format!("peer-{ip}:{port}"),
-        name: format!("Appareil {ip}"),
+        name,
         ip: ip.clone(),
         port,
-        fingerprint_short: "0000".into(),
+        fingerprint_short,
         trusted: false,
-        platform: std::env::consts::OS.into(),
+        platform,
     };
     let _ = app.emit("peer_discovered", ev.clone());
     Ok(ev)
