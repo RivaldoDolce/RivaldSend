@@ -321,7 +321,15 @@ function AppInner() {
           <div className="space-y-4 pb-20">
             {mobileTab === "home" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} />}
             {mobileTab === "discovery" && <div className="fade-in"><DiscoveryView /></div>}
-            {mobileTab === "send" && <div className="fade-in"><HistoryView direction="sent" /></div>}
+            {mobileTab === "send" && (
+              <div className="fade-in space-y-4">
+                <div className="text-center">
+                  <h2 className="text-lg font-bold">Envoyer</h2>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">Choisis des fichiers, puis l'appareil destinataire</p>
+                </div>
+                <DropZone onFilesSelected={handleFiles} onPathsSelected={handlePaths} />
+              </div>
+            )}
             {mobileTab === "received" && <div className="fade-in"><HistoryView direction="received" /></div>}
             {mobileTab === "settings" && <div className="fade-in"><SettingsView /></div>}
           </div>
