@@ -198,8 +198,21 @@ pub async fn reject_incoming(app: AppHandle, requestId: String) -> Result<(), St
     Ok(())
 }
 #[tauri::command]
-pub fn open_file_dialog() -> Option<Vec<String>> {
-    None
+pub async fn open_file_dialog(app: AppHandle) -> Result<Option<Vec<String>>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    // Le dialogue natif est bloquant : l'exécuter hors du runtime async.
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().blocking_pick_files()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(picked.map(|paths| {
+        paths
+            .into_iter()
+            .filter_map(|p| p.into_path().ok())
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
+    }))
 }
 #[tauri::command]
 pub async fn list_history(history_path: Option<String>) -> Result<Vec<rivaldsend_core::history::HistoryEntry>, String> {

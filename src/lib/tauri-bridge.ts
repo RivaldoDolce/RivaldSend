@@ -101,6 +101,10 @@ export async function pickFiles(): Promise<string[] | null> {
   return null;
 }
 
+export async function openFileDialog(): Promise<string[] | null> {
+  return invoke<string[] | null>("open_file_dialog");
+}
+
 // ============ EVENT TYPES ============
 
 export type TransferProgressEvent = {
