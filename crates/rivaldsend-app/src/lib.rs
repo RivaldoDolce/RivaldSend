@@ -12,9 +12,17 @@ pub struct MdnsState {
     pub daemon: Arc<ServiceDaemon>,
 }
 
-/// Cache des pairs découverts par le listener mDNS persistant
+/// Cache des pairs découverts par le listener mDNS persistant.
+/// Chaque entrée est horodatée pour permettre l'expiration (anti-fuite).
 #[derive(Clone, Default)]
-pub struct PeerCacheState(pub Arc<tokio::sync::Mutex<HashMap<String, events::PeerDiscoveredEvent>>>);
+pub struct PeerCacheState(
+    pub Arc<tokio::sync::Mutex<HashMap<String, (std::time::Instant, events::PeerDiscoveredEvent)>>>,
+);
+
+/// Durée de vie max d'une entrée du cache sans re-résolution
+const PEER_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+/// Borne de sécurité sur le nombre de pairs en cache
+const PEER_CACHE_MAX: usize = 256;
 
 /// Décision prise sur une demande entrante (acceptée → dossier cible, refusée → None).
 /// Conservée pour que le pipeline de réception sache où écrire (ou refuser) les chunks.
@@ -159,11 +167,27 @@ pub fn run_tauri() {
                                     .unwrap_or("unknown")
                                     .to_string(),
                             };
-                            cache.lock().await.insert(fullname, ev.clone());
+                            {
+                                let mut guard = cache.lock().await;
+                                // Anti-fuite : expire les entrées non re-résolues…
+                                let now = std::time::Instant::now();
+                                guard.retain(|_, (seen, _)| now.duration_since(*seen) < PEER_CACHE_TTL);
+                                // …et borne la taille en évinçant la plus ancienne.
+                                if guard.len() >= PEER_CACHE_MAX {
+                                    if let Some(oldest) = guard
+                                        .iter()
+                                        .min_by_key(|(_, (seen, _))| *seen)
+                                        .map(|(k, _)| k.clone())
+                                    {
+                                        guard.remove(&oldest);
+                                    }
+                                }
+                                guard.insert(fullname, (now, ev.clone()));
+                            }
                             let _ = ev_handle.emit("peer_discovered", ev);
                         }
                         Ok(ServiceEvent::ServiceRemoved(_ty, fullname)) => {
-                            if let Some(ev) = cache.lock().await.remove(&fullname) {
+                            if let Some((_, ev)) = cache.lock().await.remove(&fullname) {
                                 let _ = ev_handle.emit("peer_lost", serde_json::json!({ "id": ev.id }));
                             }
                         }

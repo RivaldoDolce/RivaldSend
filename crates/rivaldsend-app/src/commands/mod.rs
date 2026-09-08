@@ -332,7 +332,7 @@ pub async fn rescan_peers(
     // Le browse persistant (lib.rs) maintient le cache à jour en temps réel.
     // « Rescanner » = ré-émettre instantanément les pairs connus vers l'UI.
     let peers: Vec<crate::events::PeerDiscoveredEvent> =
-        cache.0.lock().await.values().cloned().collect();
+        cache.0.lock().await.values().map(|(_, ev)| ev.clone()).collect();
     for peer in peers {
         let _ = app.emit("peer_discovered", peer);
     }
