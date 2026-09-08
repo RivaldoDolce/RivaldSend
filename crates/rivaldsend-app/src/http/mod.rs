@@ -19,20 +19,22 @@ async fn create_transfer(State(_s): State<AppState>, Json(body): Json<CreateTran
     rivaldsend_proto::validation::validate_manifest(&body.manifest).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     Ok(Json(serde_json::json!({"transfer_id": body.manifest.transfer_id})))
 }
-async fn put_chunk(State(s): State<AppState>, Path(id): Path<String>, body: bytes::Bytes) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+async fn put_chunk(State(s): State<AppState>, Path((id, offset)): Path<(String, String)>, body: bytes::Bytes) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     if body.len() > rivaldsend_proto::limits::MAX_CHUNK_SIZE { return Err((StatusCode::PAYLOAD_TOO_LARGE, "chunk too large".into())); }
     let uuid = id.parse::<uuid::Uuid>().map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let offset = offset.parse::<u64>().map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     if s.manager.status(&uuid).await.is_none() {
         return Err((StatusCode::NOT_FOUND, "transfer not found".into()));
     }
     let chunk_dir = rivaldsend_core::manager::TransferManager::default_partial_dir(uuid);
     tokio::fs::create_dir_all(&chunk_dir).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let offset_path = chunk_dir.join(format!("{}.chunk", uuid));
-    tokio::fs::write(&offset_path, &body).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let ack = body.len() as u64;
+    // Écriture sparse au vrai offset (reprise possible après coupure)
+    let data_path = chunk_dir.join("data.bin");
+    rivaldsend_core::pipeline::writer::write_chunk(&data_path, offset, &body).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let ack = offset + body.len() as u64;
     let resume_path = s.manager.resume_path(uuid);
     let mut state = s.manager.resume(uuid).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.unwrap_or_else(|| rivaldsend_core::resume::ResumeState::new(uuid));
-    state.add_ack(rivaldsend_proto::ChunkAck { offset: 0, size: ack as u32 });
+    state.add_ack(rivaldsend_proto::ChunkAck { offset, size: body.len() as u32 });
     let _ = rivaldsend_core::resume::save(&resume_path, &state).await;
     Ok(Json(serde_json::json!({"ack_offset": ack})))
 }
@@ -67,7 +69,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/identity", get(get_identity))
         .route("/v1/negotiate", post(negotiate))
         .route("/v1/transfers", post(create_transfer))
-        .route("/v1/transfers/:id/chunks", put(put_chunk))
+        .route("/v1/transfers/:id/chunks/:offset", put(put_chunk))
         .route("/v1/transfers/:id/resume", post(resume_transfer))
         .route("/v1/transfers/:id/complete", post(complete_transfer))
         .route("/v1/transfers/:id", axum::routing::delete(cancel_transfer))
