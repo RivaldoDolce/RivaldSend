@@ -42,20 +42,37 @@ pub async fn start_transfer(
             return Err(format!("fichier introuvable: {p}"));
         }
     }
+
+    // Calculer la taille totale réelle
+    let total_bytes: u64 = filePaths.iter()
+        .filter_map(|p| std::fs::metadata(p).ok())
+        .map(|m| m.len())
+        .sum();
+
     let transfer_id = Uuid::new_v4();
-    let first_path = std::path::PathBuf::from(&filePaths[0]);
-    let _ = manager.enqueue(first_path).await;
+
+    // Enfiler TOUS les fichiers (pas juste le premier)
+    for path_str in &filePaths {
+        let path = std::path::PathBuf::from(path_str);
+        let _ = manager.enqueue(path).await;
+    }
+
+    // Associer le peer cible
+    manager.set_target_peer(transfer_id, peerId).await;
+
+    // Démarrer le transfert
     manager.start_transfer(transfer_id).await.map_err(|e| e.to_string())?;
+
+    // Émettre avec total_bytes réel
     let _ = app.emit("transfer_progress", crate::events::ProgressEvent {
         transfer_id: transfer_id.to_string(),
         bytes_done: 0,
-        total_bytes: 0,
+        total_bytes,  // ← taille réelle
         speed_bps: 0,
         eta_secs: 0,
         status: "running".into(),
         error: None,
     });
-    let _ = peerId;
     Ok(StartTransferResponse { transfer_id: transfer_id.to_string() })
 }
 #[allow(non_snake_case)]
@@ -80,14 +97,42 @@ pub async fn cancel_transfer(
 }
 #[allow(non_snake_case)]
 #[tauri::command]
-pub async fn pause_transfer(transferId: String) -> Result<(), String> {
-    let _ = transferId.parse::<Uuid>().map_err(|e| e.to_string())?;
+pub async fn pause_transfer(
+    manager: State<'_, Arc<rivaldsend_core::manager::TransferManager>>,
+    app: AppHandle,
+    transferId: String,
+) -> Result<(), String> {
+    let id = transferId.parse::<Uuid>().map_err(|e| e.to_string())?;
+    manager.pause_transfer(id).await.map_err(|e| e.to_string())?;
+    let _ = app.emit("transfer_progress", crate::events::ProgressEvent {
+        transfer_id: transferId,
+        bytes_done: 0,
+        total_bytes: 0,
+        speed_bps: 0,
+        eta_secs: 0,
+        status: "paused".into(),
+        error: None,
+    });
     Ok(())
 }
 #[allow(non_snake_case)]
 #[tauri::command]
-pub async fn resume_transfer(transferId: String) -> Result<(), String> {
-    let _ = transferId.parse::<Uuid>().map_err(|e| e.to_string())?;
+pub async fn resume_transfer(
+    manager: State<'_, Arc<rivaldsend_core::manager::TransferManager>>,
+    app: AppHandle,
+    transferId: String,
+) -> Result<(), String> {
+    let id = transferId.parse::<Uuid>().map_err(|e| e.to_string())?;
+    manager.resume_transfer(id).await.map_err(|e| e.to_string())?;
+    let _ = app.emit("transfer_progress", crate::events::ProgressEvent {
+        transfer_id: transferId,
+        bytes_done: 0,
+        total_bytes: 0,
+        speed_bps: 0,
+        eta_secs: 0,
+        status: "running".into(),
+        error: None,
+    });
     Ok(())
 }
 #[allow(non_snake_case)]
