@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Search, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar } from "lucide-react";
 import { usePeersStore } from "../stores/usePeersStore";
 import { VerifySheet } from "./VerifySheet";
@@ -122,29 +122,57 @@ function ManualConnectRow() {
 export function DiscoveryView() {
   const { t } = useTranslation();
   const toast = useToast();
+
+  // Ref stable : évite que `toast` (recréé à chaque render du provider)
+  // ne recrée handleScan → ne re-déclenche l'effet → boucle de scans
+  const toastRef = useRef(toast);
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
+
   const peers = usePeersStore((s) => s.peers);
   const isDiscovering = usePeersStore((s) => s.isDiscovering);
   const setDiscovering = usePeersStore((s) => s.setDiscovering);
   const [query, setQuery] = useState("");
   const q = useDebouncedValue(query, 120);
 
-  const handleScan = useCallback(async () => {
-    setDiscovering(true);
-    try {
-      const { rescanPeers } = await import("../lib/tauri-bridge");
-      await rescanPeers();
-      toast.success("Scan terminé", "La recherche des appareils est terminée.");
-    } catch (err) {
-      console.error("[discovery] rescan_peers:", err);
-      toast.error("Scan échoué", "Impossible de rechercher les appareils sur le réseau.");
-    } finally {
-      window.setTimeout(() => setDiscovering(false), 500);
-    }
-  }, [setDiscovering, toast]);
+  const scanningRef = useRef(false);
+  const mountedRef = useRef(false);
 
+  const runScan = useCallback(
+    async (silent: boolean) => {
+      if (scanningRef.current) return; // garde anti-reentrée
+      scanningRef.current = true;
+      setDiscovering(true);
+      try {
+        const { rescanPeers } = await import("../lib/tauri-bridge");
+        await rescanPeers();
+        if (!silent) {
+          toastRef.current.success("Scan terminé", "La recherche des appareils est terminée.");
+        }
+      } catch (err) {
+        console.error("[discovery] rescan_peers:", err);
+        toastRef.current.error("Scan échoué", "Impossible de rechercher les appareils sur le réseau.");
+      } finally {
+        window.setTimeout(() => {
+          setDiscovering(false);
+          scanningRef.current = false;
+        }, 500);
+      }
+    },
+    [setDiscovering] // ← deps STABLES : plus de toast, plus de peers.length
+  );
+
+  // Auto-scan strictement UNE fois au montage
   useEffect(() => {
-    handleScan();
-  }, [handleScan]);
+    if (mountedRef.current) return;
+    mountedRef.current = true;
+    void runScan(true);
+  }, [runScan]);
+
+  const handleScan = useCallback(() => {
+    void runScan(false);
+  }, [runScan]);
 
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
