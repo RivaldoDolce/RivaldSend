@@ -34,5 +34,5 @@ jobs:
       - name: Notarize macOS
         if: matrix.os == 'macos-latest'
         run: |
-          xcrun notarytool submit target/universal-apple-darwin/release/bundle/dmg/*.dmg --apple-id ${{ secrets.APPLE_ID }} --team-id ${{ secrets.APPLE_TEAM_ID }} || true
-          xcrun stapler staple target/universal-apple-darwin/release/bundle/dmg/*.dmg || true
+          xcrun notarytool submit target/universal-apple-darwin/release/bundle/dmg/*.dmg --apple-id ${{ secrets.APPLE_ID }} --team-id ${{ secrets.APPLE_TEAM_ID }} --wait
+          xcrun stapler staple target/universal-apple-darwin/release/bundle/dmg/*.dmg

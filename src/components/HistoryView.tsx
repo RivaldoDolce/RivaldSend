@@ -48,9 +48,10 @@ export function HistoryView({ direction }: Props) {
   });
 
   if (filtered.length === 0) {
+    const img = direction === "received" || !direction ? "/assets/empty-no-history.webp" : "/assets/empty-empty-transfer.webp";
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-10 text-center">
-        <History className="h-10 w-10 text-[var(--text-secondary)]" />
+        <img src={img} alt="" width={120} height={120} decoding="async" loading="lazy" className="h-28 w-28 object-contain opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
         <p className="mt-3 text-sm font-medium">
           {direction === "sent"
             ? "Aucun envoi"
@@ -65,6 +66,7 @@ export function HistoryView({ direction }: Props) {
               ? "Vos réceptions apparaîtront ici"
               : "Vos transferts apparaîtront ici"}
         </p>
+        <History className="mt-4 h-6 w-6 text-[var(--text-tertiary)] opacity-50" />
       </div>
     );
   }

@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Peer } from "../types";
 
 // ============ COMMANDS ============
 
@@ -39,6 +38,7 @@ export async function getDeviceInfo(): Promise<{
   name: string;
   ip: string;
   fingerprint: string;
+  fingerprintShort: string;
   port: number;
 }> {
   return invoke("get_device_info");
@@ -63,6 +63,22 @@ export async function checkFirewall(): Promise<string> {
   return invoke("check_firewall");
 }
 
+export async function pingPeer(ip: string, port: number): Promise<number> {
+  return invoke<number>("ping_peer", { ip, port });
+}
+
+export async function connectByIp(ip: string, port: number): Promise<PeerDiscoveredEvent> {
+  return invoke<PeerDiscoveredEvent>("connect_by_ip", { ip, port });
+}
+
+export async function rescanPeers(): Promise<void> {
+  return invoke("rescan_peers");
+}
+
+export async function approvePeer(peerId: string): Promise<void> {
+  return invoke("approve_peer", { peerId });
+}
+
 // ============ DIALOG HELPERS ============
 
 export async function pickFolder(): Promise<string | null> {
@@ -85,6 +101,10 @@ export async function pickFiles(): Promise<string[] | null> {
   return null;
 }
 
+export async function openFileDialog(): Promise<string[] | null> {
+  return invoke<string[] | null>("open_file_dialog");
+}
+
 // ============ EVENT TYPES ============
 
 export type TransferProgressEvent = {
@@ -104,6 +124,7 @@ export type PeerDiscoveredEvent = {
   port: number;
   fingerprintShort: string;
   trusted: boolean;
+  platform: string;
 };
 
 export type IncomingRequestEvent = {
@@ -176,9 +197,4 @@ export async function notifyTransferComplete(params: {
 
 // ============ HELPERS ============
 
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} o`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} Ko`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} Mo`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} Go`;
-}
+export { formatBytes } from "./utils";

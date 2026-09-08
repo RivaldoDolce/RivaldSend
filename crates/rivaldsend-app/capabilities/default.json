@@ -10,8 +10,14 @@
     "core:menu:default",
     "core:tray:default",
     "dialog:allow-open",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$APPLOCALDATA/**" }, { "path": "$DOWNLOAD/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$APPLOCALDATA/**" }, { "path": "$DOWNLOAD/**" }]
+    },
     "shell:allow-open",
     "notification:default",
     "os:default",

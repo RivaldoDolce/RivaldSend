@@ -34,8 +34,8 @@ export function SettingsView() {
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
           <span className="text-sm">{t("darkMode")}</span>
-          <button onClick={toggleDarkMode} role="switch" aria-checked={darkMode} aria-label="Activer le mode sombre" className={`relative h-7 w-12 rounded-full transition-colors ${darkMode ? "bg-[var(--accent)]" : "bg-gray-300"}`}>
-            <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${darkMode ? "left-5" : "left-0.5"}`} />
+          <button onClick={toggleDarkMode} role="switch" aria-checked={darkMode} aria-label="Activer le mode sombre" className={`relative h-7 w-12 rounded-full transition-colors ${darkMode ? "bg-[var(--accent)]" : "bg-[var(--border-strong)] dark:bg-zinc-600"}`}>
+            <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all ${darkMode ? "left-5" : "left-0.5"}`} />
           </button>
         </div>
         <div>
@@ -48,8 +48,8 @@ export function SettingsView() {
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
           <span className="text-sm">Notifications</span>
-          <button onClick={() => setNotifications(!notifications)} role="switch" aria-checked={notifications} aria-label="Activer les notifications" className={`relative h-7 w-12 rounded-full transition-colors ${notifications ? "bg-[var(--accent)]" : "bg-gray-300"}`}>
-            <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${notifications ? "left-5" : "left-0.5"}`} />
+          <button onClick={() => setNotifications(!notifications)} role="switch" aria-checked={notifications} aria-label="Activer les notifications" className={`relative h-7 w-12 rounded-full transition-colors ${notifications ? "bg-[var(--accent)]" : "bg-[var(--border-strong)] dark:bg-zinc-600"}`}>
+            <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all ${notifications ? "left-5" : "left-0.5"}`} />
           </button>
         </div>
       </div>

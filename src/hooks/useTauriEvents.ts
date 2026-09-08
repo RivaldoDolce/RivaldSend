@@ -7,12 +7,14 @@ import {
   onIncomingRequest,
   notifyTransferComplete,
   formatBytes,
+  connectByIp,
   type TransferProgressEvent,
   type PeerDiscoveredEvent,
   type IncomingRequestEvent,
 } from "../lib/tauri-bridge";
 import { usePeersStore } from "../stores/usePeersStore";
 import { useTransfersStore } from "../stores/useTransfersStore";
+import { pushProgress } from "../stores/useProgressStore";
 import { useHistoryStore } from "../stores/useHistoryStore";
 import { useIncomingStore } from "../stores/useIncomingStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
@@ -33,6 +35,7 @@ export function useTauriEvents() {
           ...peer,
           fingerprint: peer.fingerprintShort,
           status: peer.trusted ? "paired" : "discovered",
+          platform: (peer.platform as Peer["platform"]) ?? "unknown",
         };
         addPeer(p);
       })
@@ -42,13 +45,19 @@ export function useTauriEvents() {
 
     unlisteners.push(
       onTransferProgress((e: TransferProgressEvent) => {
-        updateTransfer(e.transferId, {
+        pushProgress(e.transferId, {
           bytesDone: e.bytesDone,
-          totalBytes: e.totalBytes,
           speedBps: e.speedBps,
           etaSecs: e.etaSecs,
-          status: e.status,
         });
+
+        if (e.status !== "running") {
+          updateTransfer(e.transferId, {
+            status: e.status,
+            totalBytes: e.totalBytes,
+            error: e.error,
+          });
+        }
       })
     );
 
@@ -75,8 +84,8 @@ export function useTauriEvents() {
         if (useSettingsStore.getState().notifications) {
           await notifyTransferComplete({
             title:
-              direction === "received" ? "Fichier reçu" : "Envoi terminé",
-            body: `${t.files[0]?.path ?? "Fichier"} · ${formatBytes(t.totalBytes)}`,
+              direction === "received" ? "Fichier recu" : "Envoi termine",
+            body: `${t.files[0]?.path ?? "Fichier"} - ${formatBytes(t.totalBytes)}`,
           });
         }
       })
@@ -92,4 +101,30 @@ export function useTauriEvents() {
       unlisteners.forEach((p) => p.then((fn) => fn()));
     };
   }, [addPeer, removePeer, updateTransfer, addEntry]);
+
+  useEffect(() => {
+    const retryTrustedPeers = async () => {
+      const trustedPeers = usePeersStore.getState().peers.filter((peer) => peer.trusted);
+      await Promise.all(
+        trustedPeers.map(async (peer) => {
+          try {
+            const discovered = await connectByIp(peer.ip, peer.port);
+            addPeer({
+              ...discovered,
+              fingerprint: discovered.fingerprintShort,
+              status: discovered.trusted ? "paired" : "discovered",
+              platform: (discovered.platform as Peer["platform"]) ?? peer.platform,
+            });
+          } catch {
+            // A peer can be offline; the next interval retries it.
+          }
+        }),
+      );
+    };
+
+    // Reconnexion douce : toutes les 30 s suffisent, les pairs sont
+    // déjà suivis en temps réel par le listener mDNS persistant.
+    const timer = window.setInterval(retryTrustedPeers, 30_000);
+    return () => window.clearInterval(timer);
+  }, [addPeer]);
 }

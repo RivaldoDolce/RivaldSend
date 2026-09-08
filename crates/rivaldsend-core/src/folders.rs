@@ -54,7 +54,12 @@ fn collect_recursive(
             collect_recursive(root, &path, entries, case_map, follow, depth + 1)?;
         } else if meta.is_file() {
             let size = meta.len();
-            let hash = blake3::hash(b"").to_hex().to_string();
+            let hash = if size == 0 {
+                blake3::hash(b"").to_hex().to_string()
+            } else {
+                let bytes = std::fs::read(&path).unwrap_or_default();
+                blake3::hash(&bytes).to_hex().to_string()
+            };
             entries.push(ManifestEntry { relative_path: rel_nfc, size, blake3: hash, mode: FileMode::File });
         }
     }

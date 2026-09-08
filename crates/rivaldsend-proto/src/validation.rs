@@ -69,3 +69,98 @@ pub fn validate_manifest(m: &TransferManifest) -> Result<(), ProtoError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::{FileMode, ManifestEntry, TransferManifest};
+
+    fn entry(path: &str, size: u64) -> ManifestEntry {
+        ManifestEntry {
+            relative_path: path.into(),
+            size,
+            blake3: "a".repeat(64),
+            mode: FileMode::File,
+        }
+    }
+
+    fn manifest(files: Vec<ManifestEntry>, total_bytes: u64) -> TransferManifest {
+        TransferManifest {
+            transfer_id: uuid::Uuid::new_v4(),
+            protocol_version: crate::messages::SemVer { major: 2, minor: 0, patch: 0 },
+            files,
+            total_bytes,
+            created_at: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn blake3_hex_accepts_64_hex_chars() {
+        assert!(is_valid_blake3_hex(&"ab".repeat(32)));
+        assert!(is_valid_blake3_hex(&"AB".repeat(32)));
+        assert!(!is_valid_blake3_hex(&"ab".repeat(31)));
+        assert!(!is_valid_blake3_hex(&"ab".repeat(33)));
+        assert!(!is_valid_blake3_hex(&"zz".repeat(32)));
+        assert!(!is_valid_blake3_hex(""));
+    }
+
+    #[test]
+    fn safe_paths() {
+        assert!(is_safe_relative_path("photo.jpg"));
+        assert!(is_safe_relative_path("docs/2024/photo.jpg"));
+        assert!(!is_safe_relative_path(""));
+        assert!(!is_safe_relative_path("/absolu/fichier"));
+        assert!(!is_safe_relative_path("../echappe"));
+        assert!(!is_safe_relative_path("a/../../b"));
+        assert!(!is_safe_relative_path("a//b"));
+        assert!(!is_safe_relative_path("a/./b"));
+        assert!(!is_safe_relative_path("a\\b"));
+        assert!(!is_safe_relative_path("a/b\0c"));
+    }
+
+    #[test]
+    fn path_depth_and_name_limits() {
+        let deep = (0..MAX_RELATIVE_PATH_DEPTH).map(|i| format!("d{i}")).collect::<Vec<_>>().join("/");
+        assert!(is_safe_relative_path(&deep));
+        assert!(!is_safe_relative_path(&format!("{deep}/trop-profond")));
+        assert!(is_safe_relative_path(&"x".repeat(MAX_SINGLE_FILE_NAME_LEN)));
+        assert!(!is_safe_relative_path(&"x".repeat(MAX_SINGLE_FILE_NAME_LEN + 1)));
+    }
+
+    #[test]
+    fn constant_time_eq_cases() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"abcd"));
+    }
+
+    #[test]
+    fn valid_manifest_passes() {
+        let m = manifest(vec![entry("a.bin", 10), entry("sub/b.bin", 20)], 30);
+        assert!(validate_manifest(&m).is_ok());
+        assert!(m.validate().is_ok());
+    }
+
+    #[test]
+    fn manifest_rejects_total_mismatch() {
+        let m = manifest(vec![entry("a.bin", 10)], 11);
+        assert!(matches!(validate_manifest(&m), Err(ProtoError::Validation(_))));
+    }
+
+    #[test]
+    fn manifest_rejects_unsafe_path_and_bad_hash() {
+        let m = manifest(vec![entry("../x.bin", 10)], 10);
+        assert!(matches!(validate_manifest(&m), Err(ProtoError::Validation(_))));
+        let mut bad = entry("ok.bin", 10);
+        bad.blake3 = "pas-un-hash".into();
+        let m = manifest(vec![bad], 10);
+        assert!(matches!(validate_manifest(&m), Err(ProtoError::Validation(_))));
+    }
+
+    #[test]
+    fn manifest_rejects_oversize_total() {
+        let huge = (MAX_TOTAL_TRANSFER_BYTES / 2) + 1;
+        let m = manifest(vec![entry("a.bin", huge), entry("b.bin", huge)], huge * 2);
+        assert!(matches!(validate_manifest(&m), Err(ProtoError::Limits(_))));
+    }
+}

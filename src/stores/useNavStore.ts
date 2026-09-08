@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
-export type View = "transfer" | "history" | "settings" | "pairing";
-export type MobileTab = "home" | "send" | "received" | "settings";
+export type View = "transfer" | "history" | "settings" | "pairing" | "discovery";
+export type MobileTab = "home" | "discovery" | "send" | "received" | "settings";
 
 interface NavState {
   view: View;

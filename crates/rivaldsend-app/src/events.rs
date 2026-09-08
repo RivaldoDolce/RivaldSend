@@ -2,11 +2,27 @@ use serde::Serialize;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProgressEvent {
     pub transfer_id: String,
-    pub bytes_transferred: u64,
+    pub bytes_done: u64,
     pub total_bytes: u64,
     pub speed_bps: u64,
+    pub eta_secs: u64,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeerDiscoveredEvent {
+    pub id: String,
+    pub name: String,
+    pub ip: String,
+    pub port: u16,
+    pub fingerprint_short: String,
+    pub trusted: bool,
+    pub platform: String,
 }
 pub struct ProgressEmitter {
     last: Mutex<Option<Instant>>,
