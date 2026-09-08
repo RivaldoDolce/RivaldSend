@@ -1,13 +1,22 @@
 pub mod commands;
 pub mod events;
 pub mod http;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Emitter;
+use mdns_sd::{ServiceDaemon, ServiceInfo};
+
+/// Wrapper pour partager le daemon mDNS via Tauri state
+pub struct MdnsState {
+    pub daemon: Arc<ServiceDaemon>,
+}
+
 pub fn build_router() -> axum::Router {
     let dir = rivaldsend_core::manager::TransferManager::default_resume_dir();
     let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(dir));
     http::router(http::AppState { manager })
 }
+
 pub fn run_tauri() {
     let should_block = rivaldsend_core::firewall::detect_windows_firewall()
         .map(|p| rivaldsend_core::firewall::should_block_server(&p))
@@ -16,16 +25,47 @@ pub fn run_tauri() {
         eprintln!("Réseau public détecté — serveur non démarré");
         std::process::exit(1);
     }
+
+    // 1. Créer UN SEUL daemon mDNS au démarrage
+    let daemon = Arc::new(
+        ServiceDaemon::new().expect("Failed to create mDNS daemon")
+    );
+
+    // 2. Récupérer les infos de l'appareil
+    let device_info = commands::get_device_info();
+
+    // 3. Publier le service local
+    let txt_properties: HashMap<String, String> = HashMap::from([
+        ("device_name".to_string(), "RivaldSend".to_string()),
+        ("platform".to_string(), std::env::consts::OS.to_string()),
+        ("fingerprint_short".to_string(), device_info.fingerprint_short.clone()),
+    ]);
+
+    let service_info = ServiceInfo::new(
+        rivaldsend_core::discovery::SERVICE_TYPE,
+        &device_info.name,
+        &format!("{}.local.", device_info.name.to_lowercase().replace(' ', "-")),
+        &device_info.ip,
+        device_info.port,
+        txt_properties,
+    )
+    .expect("Invalid service info");
+
+    if let Err(e) = daemon.register(service_info) {
+        tracing::error!("Failed to register mDNS service: {e}");
+    } else {
+        tracing::info!("mDNS service registered: {} at {}:{}", device_info.name, device_info.ip, device_info.port);
+    }
+
+    // 4. Manager HTTP
     let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(
         rivaldsend_core::manager::TransferManager::default_resume_dir(),
     ));
-    let discovery = rivaldsend_core::discovery::Discovery::new()
-        .expect("impossible d'initialiser la découverte mDNS");
-    let _ = discovery.register("RivaldSend", 53317, "", "2.1");
     let http_manager = manager.clone();
+
     tauri::Builder::default()
         .manage(manager)
-        .manage(discovery)
+        .manage(MdnsState { daemon }) // ← daemon partagé
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
@@ -38,7 +78,7 @@ pub fn run_tauri() {
                 let router = http::router(http::AppState { manager: http_manager });
                 match tokio::net::TcpListener::bind("0.0.0.0:53317").await {
                     Ok(l) => {
-                        tracing::info!("HTTP server listening on 127.0.0.1:53317");
+                        tracing::info!("HTTP server listening on 0.0.0.0:53317");
                         if let Err(e) = axum::serve(l, router).await {
                             tracing::error!("http server error: {e}");
                         }
