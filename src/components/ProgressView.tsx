@@ -4,13 +4,8 @@ import { useTransfersStore } from "../stores/useTransfersStore";
 import { useProgressStore } from "../stores/useProgressStore";
 import { useDeviceContext } from "../hooks/useDeviceContext";
 import { cancelTransfer, pauseTransfer, resumeTransfer } from "../lib/tauri-bridge";
+import { formatBytes } from "../lib/utils";
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} o`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} Ko`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} Mo`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} Go`;
-}
 function formatEta(secs: number): string {
   if (!secs || secs < 0) return "—";
   if (secs < 60) return `${secs}s`;

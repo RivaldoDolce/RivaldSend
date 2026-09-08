@@ -2,13 +2,8 @@ import { Download, X } from "lucide-react";
 import { useIncomingStore } from "../stores/useIncomingStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { acceptIncoming, rejectIncoming, pickFolder } from "../lib/tauri-bridge";
+import { formatBytes } from "../lib/utils";
 import { useToast } from "./toast/Toast";
-
-function formatBytes(n: number): string {
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} Ko`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} Mo`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} Go`;
-}
 
 export function IncomingRequestToast() {
   const pending = useIncomingStore((s) => s.pending);

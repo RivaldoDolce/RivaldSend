@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Upload, ShieldCheck, FolderOpen, FileText, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pickFiles, pickFolder } from "../lib/tauri-bridge";
+import { formatBytes } from "../lib/utils";
 import { usePeersStore } from "../stores/usePeersStore";
 
 interface Props {
@@ -14,12 +15,7 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
   const [dragging, setDragging] = useState(false);
   const pending = usePeersStore((s) => s.pendingFiles);
   const totalSize = useMemo(() => pending.reduce((a, f) => a + f.size, 0), [pending]);
-  const totalLabel = useMemo(() => {
-    if (totalSize < 1024) return `${totalSize} o`;
-    if (totalSize < 1024 * 1024) return `${(totalSize / 1024).toFixed(1)} Ko`;
-    if (totalSize < 1024 * 1024 * 1024) return `${(totalSize / 1024 / 1024).toFixed(1)} Mo`;
-    return `${(totalSize / 1024 / 1024 / 1024).toFixed(2)} Go`;
-  }, [totalSize]);
+  const totalLabel = useMemo(() => formatBytes(totalSize), [totalSize]);
 
   const lastOpenRef = useRef(0);
   useEffect(() => {

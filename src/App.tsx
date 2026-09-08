@@ -116,7 +116,7 @@ const TransferRowInline = memo(function TransferRowInline({ id, selectedId, onSe
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-[var(--text-secondary)]">{(speedBps / 1024 / 1024).toFixed(1)} MB/s</span>
+          <span className="text-xs font-medium text-[var(--text-secondary)]">{(speedBps / 1024 / 1024).toFixed(1)} Mo/s</span>
           {isActive && (
             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
               <button aria-label="Pause" onClick={() => pauseTransfer(tr.id).catch(console.error)} className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
