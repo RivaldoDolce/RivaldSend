@@ -38,6 +38,7 @@ export async function getDeviceInfo(): Promise<{
   name: string;
   ip: string;
   fingerprint: string;
+  fingerprintShort: string;
   port: number;
 }> {
   return invoke("get_device_info");
