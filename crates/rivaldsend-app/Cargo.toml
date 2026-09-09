@@ -31,6 +31,12 @@ qrcode = { version = "0.14", features = ["svg"] }
 dirs = "5.0"
 mdns-sd = { workspace = true }
 hostname = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+hyper-util = { workspace = true }
+rcgen = { workspace = true }
+subtle = { workspace = true }
+tokio-rustls = { workspace = true }
 
 [build-dependencies]
 tauri-build = { version = "2.4", features = [] }

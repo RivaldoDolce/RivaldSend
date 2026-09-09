@@ -79,6 +79,10 @@ export async function approvePeer(peerId: string): Promise<void> {
   return invoke("approve_peer", { peerId });
 }
 
+export async function setDownloadDirBackend(targetDir: string): Promise<void> {
+  return invoke("set_download_dir", { targetDir });
+}
+
 // ============ DIALOG HELPERS ============
 
 export async function pickFolder(): Promise<string | null> {

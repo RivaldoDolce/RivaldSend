@@ -12,10 +12,12 @@ pub struct TransferManager {
     targets: tokio::sync::Mutex<HashMap<Uuid, String>>,
     semaphore: Arc<Semaphore>,
     resume_dir: std::path::PathBuf,
+    dossier_telechargement: tokio::sync::RwLock<std::path::PathBuf>,
 }
 impl TransferManager {
     pub fn new(resume_dir: std::path::PathBuf) -> Self {
-        Self { queue: tokio::sync::Mutex::new(Queue::new()), statuses: tokio::sync::Mutex::new(HashMap::new()), targets: tokio::sync::Mutex::new(HashMap::new()), semaphore: Arc::new(Semaphore::new(2)), resume_dir }
+        let dossier_defaut = Self::default_download_dir();
+        Self { queue: tokio::sync::Mutex::new(Queue::new()), statuses: tokio::sync::Mutex::new(HashMap::new()), targets: tokio::sync::Mutex::new(HashMap::new()), semaphore: Arc::new(Semaphore::new(2)), resume_dir, dossier_telechargement: tokio::sync::RwLock::new(dossier_defaut) }
     }
     pub fn default_resume_dir() -> std::path::PathBuf {
         dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join("rivaldsend-resume")
@@ -117,5 +119,50 @@ impl TransferManager {
             }
         }
         Ok(removed)
+    }
+
+    pub async fn finalize_transfer(&self, id: Uuid) -> Result<(), CoreError> {
+        // Nettoie le dossier partiel après le succès et marque le transfert comme terminé.
+        // Limite connue : l'assemblage final vers le dossier de téléchargement
+        // reste à brancher (les octets restent dans data.bin pour l'instant).
+        let dossier_partiel = Self::default_partial_dir(id);
+        let _ = tokio::fs::remove_dir_all(&dossier_partiel).await;
+
+        // Met à jour le statut.
+        let mut s = self.statuses.lock().await;
+        if let Some(statut) = s.get_mut(&id) {
+            *statut = TransferStatus::Completed;
+        }
+
+        Ok(())
+    }
+
+    pub async fn set_default_download_dir(&self, dir: std::path::PathBuf) -> Result<(), CoreError> {
+        // Crée le dossier puis le mémorise pour les prochaines réceptions.
+        let _ = tokio::fs::create_dir_all(&dir).await?;
+        let mut garde = self.dossier_telechargement.write().await;
+        *garde = dir;
+        Ok(())
+    }
+
+    pub async fn get_download_dir(&self) -> std::path::PathBuf {
+        self.dossier_telechargement.read().await.clone()
+    }
+
+    pub fn default_download_dir() -> std::path::PathBuf {
+        dirs::download_dir()
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")))
+    }
+
+    /// Résout un chemin relatif par rapport au dossier de téléchargement configuré.
+    pub async fn resolve_download_path(&self, relatif: &str) -> std::path::PathBuf {
+        let base = self.get_download_dir().await;
+        if let Some(reste) = relatif.strip_prefix("~/") {
+            base.join(reste)
+        } else if relatif.starts_with('/') {
+            std::path::PathBuf::from(relatif)
+        } else {
+            base.join(relatif)
+        }
     }
 }

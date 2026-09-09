@@ -345,3 +345,24 @@ pub async fn approve_peer(app: AppHandle, peerId: String) -> Result<(), String> 
     let _ = app.emit("peer_approved", serde_json::json!({"peerId": peerId}));
     Ok(())
 }
+
+/// Mémorise le dossier de téléchargement choisi dans les réglages.
+/// Gère le préfixe ~/ puis délègue au gestionnaire de transferts.
+#[allow(non_snake_case)]
+#[tauri::command]
+pub async fn set_download_dir(
+    manager: State<'_, Arc<rivaldsend_core::manager::TransferManager>>,
+    targetDir: String,
+) -> Result<(), String> {
+    let dossier = if let Some(reste) = targetDir.strip_prefix("~/") {
+        dirs::download_dir()
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join(reste)
+    } else {
+        std::path::PathBuf::from(&targetDir)
+    };
+
+    manager.set_default_download_dir(dossier).await
+        .map_err(|e| e.to_string())
+}

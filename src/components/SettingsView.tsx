@@ -1,10 +1,10 @@
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useTranslation } from "react-i18next";
-import { pickFolder } from "../lib/tauri-bridge";
+import { pickFolder, setDownloadDirBackend } from "../lib/tauri-bridge";
 import { useToast } from "./toast/Toast";
 
 export function SettingsView() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { downloadDir, setDownloadDir, darkMode, toggleDarkMode, language, setLanguage, notifications, setNotifications } = useSettingsStore();
   const toast = useToast();
 
@@ -13,10 +13,16 @@ export function SettingsView() {
       const selected = await pickFolder();
       if (selected) {
         setDownloadDir(selected);
+        // Transmet le dossier au backend pour les prochaines réceptions.
+        try {
+          await setDownloadDirBackend(selected);
+        } catch (err) {
+          console.error("[Réglages] set_download_dir a échoué :", err);
+        }
         toast.success("Dossier modifié", selected);
       }
     } catch (err) {
-      console.error("[Settings] pickFolder failed:", err);
+      console.error("[Réglages] choix du dossier impossible :", err);
       toast.error("Erreur", "Impossible d'ouvrir le sélecteur de dossier");
     }
   };
@@ -40,7 +46,15 @@ export function SettingsView() {
         </div>
         <div>
           <label className="text-xs font-medium text-[var(--text-secondary)]">{t("language")}</label>
-          <select value={language} onChange={(e) => setLanguage(e.target.value as "fr" | "en" | "es")} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm">
+          <select
+            value={language}
+            onChange={(e) => {
+              const lang = e.target.value as "fr" | "en" | "es";
+              setLanguage(lang);
+              i18n.changeLanguage(lang);
+            }}
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+          >
             <option value="fr">Français</option>
             <option value="en">English</option>
             <option value="es">Español</option>

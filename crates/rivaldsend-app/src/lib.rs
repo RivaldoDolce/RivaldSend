@@ -39,11 +39,11 @@ pub struct IncomingState(pub Arc<tokio::sync::Mutex<HashMap<String, IncomingDeci
 pub fn build_router() -> axum::Router {
     let dir = rivaldsend_core::manager::TransferManager::default_resume_dir();
     let manager = Arc::new(rivaldsend_core::manager::TransferManager::new(dir));
-    http::router(http::AppState { manager })
+    http::router(http::AppState::new(manager))
 }
 
 pub fn run_tauri() {
-    let should_block = rivaldsend_core::firewall::detect_windows_firewall()
+    let should_block = rivaldsend_core::firewall::detect_network_profile()
         .map(|p| rivaldsend_core::firewall::should_block_server(&p))
         .unwrap_or(false);
     if should_block {
@@ -104,9 +104,9 @@ pub fn run_tauri() {
             let http_handle = app.handle().clone();
             let ev_handle = app.handle().clone();
 
-            // --- Serveur HTTP (inchangé) ---
+            // --- Serveur HTTP (toujours en clair : le TLS reste à brancher, voir P1) ---
             tauri::async_runtime::spawn(async move {
-                let router = http::router(http::AppState { manager: http_manager });
+                let router = http::router(http::AppState::new(http_manager));
                 match tokio::net::TcpListener::bind("0.0.0.0:53317").await {
                     Ok(l) => {
                         tracing::info!("HTTP server listening on 0.0.0.0:53317");
@@ -218,7 +218,8 @@ pub fn run_tauri() {
             commands::ping_peer,
             commands::connect_by_ip,
             commands::rescan_peers,
-            commands::approve_peer
+            commands::approve_peer,
+            commands::set_download_dir
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| { eprintln!("tauri error: {e}"); });
