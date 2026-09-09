@@ -1,11 +1,14 @@
 import { usePeersStore } from "../stores/usePeersStore";
 import { useTransfersStore } from "../stores/useTransfersStore";
 import { useProgressStore } from "../stores/useProgressStore";
+import { useServerStore } from "../stores/useServerStore";
 
 const APP_VERSION = "0.3.0";
 
 export function StatusBar() {
   const peers = usePeersStore((s) => s.peers);
+  const tls = useServerStore((s) => s.tls);
+  const empreinte = useServerStore((s) => s.empreinte);
   const transfers = useTransfersStore((s) => s.transfers);
   const byId = useProgressStore((s) => s.byId);
   const activeIds = transfers.filter((t) => t.status === "running").map((t) => t.id);
@@ -21,6 +24,9 @@ export function StatusBar() {
       </span>
       <span className="hidden sm:flex items-center gap-3">
         {active > 0 && <span>↑ {mb} Mo/s</span>}
+        <span title={empreinte ? `Empreinte TLS : ${empreinte}` : "Empreinte TLS non reçue"}>
+          {tls ? `🔒 TLS · ${empreinte?.slice(0, 8) ?? "…"}` : "⚠️ sans TLS"}
+        </span>
         <span>v{APP_VERSION}</span>
       </span>
     </div>

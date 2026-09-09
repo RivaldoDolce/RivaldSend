@@ -46,14 +46,27 @@ pub struct Health {
 #[derive(Deserialize)]
 pub struct CreateTransfer {
     pub manifest: rivaldsend_proto::TransferManifest,
-    /// Code d'appairage à 6 chiffres affiché à l'expéditeur (jamais réutilisé tel quel).
+    /// Code d'appairage affiché à l'expéditeur (jamais réutilisé tel quel).
     #[serde(default)]
     pub code: String,
 }
 
-/// Vérifie le format du code d'appairage (6 chiffres).
+/// Normalise un code saisi ou scanné : retire le tiret, passe en majuscules.
+fn normaliser_code(code: &str) -> String {
+    code.trim().replace('-', "").to_ascii_uppercase()
+}
+
+/// Vérifie le format du code d'appairage.
+/// Accepte le format affiché par l'interface (6 caractères sans 0/O/1/I)
+/// ainsi que l'ancien format à 6 chiffres, pour compatibilité.
 fn verifier_code(code: &str) -> Result<(), (StatusCode, String)> {
-    if code.len() != 6 || !code.bytes().all(|c| c.is_ascii_digit()) {
+    let normalise = normaliser_code(code);
+    let valide = normalise.len() == 6
+        && (normalise.bytes().all(|c| c.is_ascii_digit())
+            || normalise
+                .bytes()
+                .all(|c| matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P'..=b'Z' | b'2'..=b'9')));
+    if !valide {
         return Err((
             StatusCode::UNAUTHORIZED,
             "code d'appairage invalide".into(),
@@ -86,9 +99,10 @@ async fn create_transfer(
     // Le sel reprend l'identifiant du transfert, connu des deux pairs, de sorte
     // que l'expéditeur retrouve la même PSK sans qu'elle transite en clair.
     verifier_code(&body.code)?;
+    let code_normalise = normaliser_code(&body.code);
     let identifiant = body.manifest.transfer_id.to_string();
     let sel = body.manifest.transfer_id.as_bytes().to_vec();
-    let psk = psk_en_hex(rivaldsend_core::pairing::derive_psk(&body.code, &sel));
+    let psk = psk_en_hex(rivaldsend_core::pairing::derive_psk(&code_normalise, &sel));
 
     {
         let mut cache = s.psk_cache.write().await;
@@ -332,4 +346,31 @@ pub fn router(etat: AppState) -> Router {
                 .layer(tower_http::trace::TraceLayer::new_for_http()),
         )
         .with_state(etat)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn le_code_pin_affiche_est_accepte() {
+        // Format réel de PairingView : 6 caractères, tiret d'affichage toléré.
+        assert!(verifier_code("AB3-9XZ").is_ok());
+        assert!(verifier_code("ab39xz").is_ok());
+        // Ancien format numérique conservé pour compatibilité.
+        assert!(verifier_code("123456").is_ok());
+        // Formats rejetés.
+        assert!(verifier_code("").is_err());
+        assert!(verifier_code("ABC").is_err());
+        assert!(verifier_code("AB39XZO").is_err());
+        assert!(verifier_code("AB39X0").is_err());
+        assert!(verifier_code("AB39X1").is_err());
+    }
+
+    #[test]
+    fn la_psk_hex_fait_64_caracteres() {
+        let psk = psk_en_hex(rivaldsend_core::pairing::derive_psk("AB39XZ", b"sel-test"));
+        assert_eq!(psk.len(), 64);
+        assert!(psk.iter().all(|c| c.is_ascii_hexdigit()));
+    }
 }

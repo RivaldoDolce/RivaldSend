@@ -10,6 +10,7 @@ pub struct TransferManager {
     queue: tokio::sync::Mutex<Queue>,
     statuses: tokio::sync::Mutex<HashMap<Uuid, TransferStatus>>,
     targets: tokio::sync::Mutex<HashMap<Uuid, String>>,
+    codes: tokio::sync::Mutex<HashMap<Uuid, String>>,
     semaphore: Arc<Semaphore>,
     resume_dir: std::path::PathBuf,
     dossier_telechargement: tokio::sync::RwLock<std::path::PathBuf>,
@@ -17,7 +18,7 @@ pub struct TransferManager {
 impl TransferManager {
     pub fn new(resume_dir: std::path::PathBuf) -> Self {
         let dossier_defaut = Self::default_download_dir();
-        Self { queue: tokio::sync::Mutex::new(Queue::new()), statuses: tokio::sync::Mutex::new(HashMap::new()), targets: tokio::sync::Mutex::new(HashMap::new()), semaphore: Arc::new(Semaphore::new(2)), resume_dir, dossier_telechargement: tokio::sync::RwLock::new(dossier_defaut) }
+        Self { queue: tokio::sync::Mutex::new(Queue::new()), statuses: tokio::sync::Mutex::new(HashMap::new()), targets: tokio::sync::Mutex::new(HashMap::new()), codes: tokio::sync::Mutex::new(HashMap::new()), semaphore: Arc::new(Semaphore::new(2)), resume_dir, dossier_telechargement: tokio::sync::RwLock::new(dossier_defaut) }
     }
     pub fn default_resume_dir() -> std::path::PathBuf {
         dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join("rivaldsend-resume")
@@ -79,6 +80,15 @@ impl TransferManager {
     /// Retourne le peer cible associé au transfert, le cas échéant
     pub async fn target_peer(&self, id: &Uuid) -> Option<String> {
         self.targets.lock().await.get(id).cloned()
+    }
+    /// Mémorise le code d'appairage saisi pour un transfert sortant.
+    /// Utilisé par le futur travailleur d'envoi pour dériver la même PSK que le receveur.
+    pub async fn set_pairing_code(&self, id: Uuid, code: String) {
+        self.codes.lock().await.insert(id, code);
+    }
+    /// Retourne le code d'appairage mémorisé pour un transfert, le cas échéant.
+    pub async fn pairing_code(&self, id: &Uuid) -> Option<String> {
+        self.codes.lock().await.get(id).cloned()
     }
     pub async fn resume(&self, id: Uuid) -> Result<Option<crate::resume::ResumeState>, CoreError> {
         let path = self.resume_dir.join(format!("{id}.json"));
@@ -177,5 +187,40 @@ impl TransferManager {
         } else {
             base.join(relatif)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn le_code_appairage_est_memorise_par_transfert() {
+        let dossier = tempfile::tempdir().unwrap();
+        let gestionnaire =
+            TransferManager::new(dossier.path().to_path_buf());
+        let id = Uuid::new_v4();
+        assert!(gestionnaire.pairing_code(&id).await.is_none());
+        gestionnaire
+            .set_pairing_code(id, "AB39XZ".to_string())
+            .await;
+        assert_eq!(
+            gestionnaire.pairing_code(&id).await.as_deref(),
+            Some("AB39XZ")
+        );
+    }
+
+    #[tokio::test]
+    async fn le_dossier_telechargement_est_memorise() {
+        let dossier = tempfile::tempdir().unwrap();
+        let gestionnaire =
+            TransferManager::new(dossier.path().to_path_buf());
+        let cible = dossier.path().join("telechargements");
+        gestionnaire
+            .set_default_download_dir(cible.clone())
+            .await
+            .unwrap();
+        assert_eq!(gestionnaire.get_download_dir().await, cible);
+        assert!(cible.exists());
     }
 }

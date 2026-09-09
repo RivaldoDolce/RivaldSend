@@ -74,7 +74,7 @@ function usePeerLatency(ip: string, port: number) {
 
 function ManualConnectRow() {
   const [ip, setIp] = useState("");
-  const [port, setPort] = useState("7420");
+  const [port, setPort] = useState("53317");
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -83,7 +83,7 @@ function ManualConnectRow() {
     setBusy(true);
     try {
       const { connectByIp } = await import("../lib/tauri-bridge");
-      const peer = await connectByIp(ip.trim(), Number(port) || 7420);
+      const peer = await connectByIp(ip.trim(), Number(port) || 53317);
       usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: peer.platform as never, latencyMs: undefined, trusted: peer.trusted });
       toast.success("Appareil ajouté", peer.name);
     } catch (err) {
@@ -252,11 +252,12 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
     }
   }, [peer.ip, peer.port]);
 
-  const handleApprove = useCallback(async () => {
+  const handleApprove = useCallback(async (code: string) => {
     try {
       const { approvePeer } = await import("../lib/tauri-bridge");
-      await approvePeer(peer.id);
+      await approvePeer(peer.id, code);
       usePeersStore.getState().updatePeer(peer.id, { trusted: true, status: "paired" });
+      usePeersStore.getState().setPairingCode(peer.id, code);
       setShowVerify(false);
       setConnState("paired");
     } catch {

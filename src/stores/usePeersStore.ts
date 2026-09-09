@@ -8,6 +8,7 @@ interface PeersState {
   isDiscovering: boolean;
   showSendModal: boolean;
   pendingFiles: Array<{ path: string; size: number }>;
+  pairingCodes: Record<string, string>;
   setPeers: (peers: Peer[]) => void;
   addPeer: (peer: Peer) => void;
   removePeer: (id: string) => void;
@@ -16,6 +17,8 @@ interface PeersState {
   setDiscovering: (v: boolean) => void;
   openSendModal: (files: Array<{ path: string; size: number }>) => void;
   closeSendModal: () => void;
+  setPairingCode: (peerId: string, code: string) => void;
+  clearPairingCode: (peerId: string) => void;
 }
 
 export const usePeersStore = create<PeersState>()(
@@ -26,6 +29,7 @@ export const usePeersStore = create<PeersState>()(
     isDiscovering: false,
     showSendModal: false,
     pendingFiles: [],
+    pairingCodes: {},
     setPeers: (peers) => set({ peers }),
     addPeer: (peer) =>
       set((s) => {
@@ -65,6 +69,14 @@ export const usePeersStore = create<PeersState>()(
     setDiscovering: (isDiscovering) => set({ isDiscovering }),
     openSendModal: (files) => set({ showSendModal: true, pendingFiles: files }),
     closeSendModal: () => set({ showSendModal: false, pendingFiles: [] }),
+    setPairingCode: (peerId, code) =>
+      set((s) => ({ pairingCodes: { ...s.pairingCodes, [peerId]: code } })),
+    clearPairingCode: (peerId) =>
+      set((s) => {
+        const next = { ...s.pairingCodes };
+        delete next[peerId];
+        return { pairingCodes: next };
+      }),
     })),
     {
       name: "rivaldsend-peers",

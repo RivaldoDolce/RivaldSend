@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ShieldCheck, X } from "lucide-react";
 import type { Peer } from "../types";
 
@@ -9,7 +10,20 @@ function fpEmojis(fp: string): string {
   return s;
 }
 
-export function VerifySheet({ peer, onApprove, onReject }: { peer: Peer; onApprove: () => void; onReject: () => void }) {
+export function VerifySheet({ peer, onApprove, onReject }: { peer: Peer; onApprove: (code: string) => void; onReject: () => void }) {
+  const [code, setCode] = useState("");
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  const valider = () => {
+    const normalise = code.trim().replace("-", "").toUpperCase();
+    if (!/^[A-HJ-NP-Z2-9]{6}$/.test(normalise) && !/^[0-9]{6}$/.test(normalise)) {
+      setErreur("Code à 6 caractères requis (affiché sur l'autre appareil).");
+      return;
+    }
+    setErreur(null);
+    onApprove(normalise);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onReject}>
       <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -25,9 +39,20 @@ export function VerifySheet({ peer, onApprove, onReject }: { peer: Peer; onAppro
           <p className="mt-2 text-2xl">{fpEmojis(peer.fingerprintShort)}</p>
           <p className="mono mt-2 text-xs text-[var(--text-tertiary)]">{peer.fingerprint.slice(0,16) || peer.fingerprintShort}</p>
         </div>
+        <div className="mt-4">
+          <label className="text-xs font-medium text-[var(--text-secondary)]">Code d'appairage affiché sur cet appareil</label>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder=" ex : AB3-9XZ"
+            maxLength={7}
+            className="mono mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm uppercase tracking-widest"
+          />
+          {erreur && <p className="mt-1 text-xs text-red-500">{erreur}</p>}
+        </div>
         <div className="mt-4 flex gap-2">
           <button onClick={onReject} className="flex-1 rounded-full border border-[var(--border)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--surface-hover)]">Rejeter</button>
-          <button onClick={onApprove} className="flex-1 rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Approuver</button>
+          <button onClick={valider} className="flex-1 rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Approuver</button>
         </div>
       </div>
     </div>

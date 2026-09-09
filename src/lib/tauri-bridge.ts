@@ -7,6 +7,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 export async function startTransfer(params: {
   peerId: string;
   filePaths: string[];
+  code?: string;
 }): Promise<{ transferId: string }> {
   return invoke("start_transfer", params);
 }
@@ -75,8 +76,8 @@ export async function rescanPeers(): Promise<void> {
   return invoke("rescan_peers");
 }
 
-export async function approvePeer(peerId: string): Promise<void> {
-  return invoke("approve_peer", { peerId });
+export async function approvePeer(peerId: string, code?: string): Promise<void> {
+  return invoke("approve_peer", { peerId, code: code ?? null });
 }
 
 export async function setDownloadDirBackend(targetDir: string): Promise<void> {
@@ -172,6 +173,19 @@ export function onTransferCompleted(
     "transfer_completed",
     (e) => cb(e.payload)
   );
+}
+
+export type ServerReadyEvent = {
+  port: number;
+  tls: boolean;
+  empreinte?: string;
+  erreur?: string;
+};
+
+export function onServerReady(
+  cb: (e: ServerReadyEvent) => void
+): Promise<UnlistenFn> {
+  return listen<ServerReadyEvent>("server_ready", (e) => cb(e.payload));
 }
 
 // ============ SYSTEM NOTIFICATIONS ============

@@ -66,6 +66,28 @@ pub fn get_device_info() -> DeviceInfoResponse {
 pub struct StartTransferResponse {
     pub transfer_id: String,
 }
+/// Construit le client HTTPS tolérant aux certificats auto-signés.
+/// Contexte : réseau local sans autorité de certification. Le chiffrement TLS
+/// bloque l'écoute passive ; l'authentification passe par la PSK d'appairage
+/// et l'empreinte d'appareil échangée hors bande (QR), pas par le certificat.
+fn client_tls(duree_s: u64) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(duree_s))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// Vérifie le format d'un code d'appairage (6 caractères affichés, tiret toléré).
+fn code_appairage_valide(code: &str) -> bool {
+    let normalise = code.trim().replace('-', "").to_ascii_uppercase();
+    normalise.len() == 6
+        && (normalise.bytes().all(|c| c.is_ascii_digit())
+            || normalise
+                .bytes()
+                .all(|c| matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P'..=b'Z' | b'2'..=b'9')))
+}
+
 #[allow(non_snake_case)]
 #[tauri::command]
 pub async fn start_transfer(
@@ -73,6 +95,7 @@ pub async fn start_transfer(
     manager: State<'_, Arc<rivaldsend_core::manager::TransferManager>>,
     peerId: String,
     filePaths: Vec<String>,
+    code: Option<String>,
 ) -> Result<StartTransferResponse, String> {
     if filePaths.is_empty() {
         return Err("aucun fichier".into());
@@ -91,6 +114,15 @@ pub async fn start_transfer(
         .sum();
 
     let transfer_id = Uuid::new_v4();
+
+    // Mémoriser le code d'appairage pour le futur travailleur d'envoi HTTPS.
+    // Le receveur dérive la même PSK à partir de ce code et de l'identifiant.
+    if let Some(c) = code {
+        if !code_appairage_valide(&c) {
+            return Err("code d'appairage invalide".into());
+        }
+        manager.set_pairing_code(transfer_id, c).await;
+    }
 
     // Enfiler TOUS les fichiers (pas juste le premier)
     for path_str in &filePaths {
@@ -288,15 +320,9 @@ pub async fn connect_by_ip(app: AppHandle, ip: String, port: u16) -> Result<crat
     // 1. Vérifier la connectivité
     ping_peer(ip.clone(), port).await?;
 
-    // 2. Récupérer l'identité du pair en HTTPS d'abord, HTTP en repli.
-    // Le certificat est auto-signé : on accepte l'invalidité ici car
-    // l'authentification réelle passe par la PSK et l'empreinte d'appareil
-    // échangée hors bande (QR). Le TLS ne sert qu'à chiffrer le transport.
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+    // 2. Récupérer l'identité du pair en HTTPS d'abord, HTTP en repli
+    // (compatibilité avec les pairs d'ancienne version encore en clair).
+    let client = client_tls(3)?;
 
     let mut reponse = None;
     let mut derniere_erreur = String::new();
@@ -357,8 +383,13 @@ pub async fn rescan_peers(
 
 #[allow(non_snake_case)]
 #[tauri::command]
-pub async fn approve_peer(app: AppHandle, peerId: String) -> Result<(), String> {
-    let _ = app.emit("peer_approved", serde_json::json!({"peerId": peerId}));
+pub async fn approve_peer(app: AppHandle, peerId: String, code: Option<String>) -> Result<(), String> {
+    if let Some(c) = code.as_deref() {
+        if !code_appairage_valide(c) {
+            return Err("code d'appairage invalide".into());
+        }
+    }
+    let _ = app.emit("peer_approved", serde_json::json!({"peerId": peerId, "code": code}));
     Ok(())
 }
 

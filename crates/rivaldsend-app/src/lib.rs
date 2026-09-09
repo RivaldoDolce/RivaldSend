@@ -127,7 +127,7 @@ pub fn run_tauri() {
                     }
                 };
                 tracing::info!("serveur HTTPS en écoute sur 0.0.0.0:53317");
-                let _ = http_handle.emit("server_ready", serde_json::json!({"port":53317, "tls":true}));
+                let _ = http_handle.emit("server_ready", serde_json::json!({"port":53317, "tls":true, "empreinte":empreinte}));
                 use hyper_util::rt::{TokioExecutor, TokioIo};
                 loop {
                     let (flux_tcp, adresse) = match ecouteur.accept().await {

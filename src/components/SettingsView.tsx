@@ -1,4 +1,5 @@
 import { useSettingsStore } from "../stores/useSettingsStore";
+import { useServerStore } from "../stores/useServerStore";
 import { useTranslation } from "react-i18next";
 import { pickFolder, setDownloadDirBackend } from "../lib/tauri-bridge";
 import { useToast } from "./toast/Toast";
@@ -6,6 +7,8 @@ import { useToast } from "./toast/Toast";
 export function SettingsView() {
   const { t, i18n } = useTranslation();
   const { downloadDir, setDownloadDir, darkMode, toggleDarkMode, language, setLanguage, notifications, setNotifications } = useSettingsStore();
+  const tls = useServerStore((s) => s.tls);
+  const empreinte = useServerStore((s) => s.empreinte);
   const toast = useToast();
 
   const browseDir = async () => {
@@ -65,6 +68,18 @@ export function SettingsView() {
           <button onClick={() => setNotifications(!notifications)} role="switch" aria-checked={notifications} aria-label="Activer les notifications" className={`relative h-7 w-12 rounded-full transition-colors ${notifications ? "bg-[var(--accent)]" : "bg-[var(--border-strong)] dark:bg-zinc-600"}`}>
             <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all ${notifications ? "left-5" : "left-0.5"}`} />
           </button>
+        </div>
+        <div className="pt-2 border-t border-[var(--border)]">
+          <p className="text-sm font-medium">{t("tlsTitle")}</p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {tls ? t("tlsActive") : t("tlsInactive")}
+          </p>
+          {empreinte && (
+            <p className="mono mt-2 break-all text-xs" title={empreinte}>
+              {t("tlsFingerprint")} : {empreinte.slice(0, 32)}…
+            </p>
+          )}
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">{t("tlsHint")}</p>
         </div>
       </div>
     </div>

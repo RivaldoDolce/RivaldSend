@@ -20,6 +20,11 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
 
   const handleSend = useCallback(async () => {
     if (!selectedPeer) return;
+    const code = usePeersStore.getState().pairingCodes[selectedPeer.id];
+    if (!code) {
+      toast.error("Code requis", "Approuvez d'abord l'appareil avec son code d'appairage.");
+      return;
+    }
     const pendingTransferId = crypto.randomUUID();
     const transfer = {
       id: pendingTransferId,
@@ -38,6 +43,7 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
       const res = await startTransfer({
         peerId: selectedPeer.id,
         filePaths: pendingFiles.map((f) => f.path),
+        code,
       });
       const realId = (res as { transferId?: string; transfer_id?: string })?.transferId ?? (res as { transfer_id?: string })?.transfer_id ?? pendingTransferId;
       if (realId !== pendingTransferId) {

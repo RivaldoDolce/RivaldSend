@@ -5,6 +5,7 @@ import {
   onTransferProgress,
   onTransferCompleted,
   onIncomingRequest,
+  onServerReady,
   notifyTransferComplete,
   formatBytes,
   connectByIp,
@@ -12,6 +13,7 @@ import {
   type PeerDiscoveredEvent,
   type IncomingRequestEvent,
 } from "../lib/tauri-bridge";
+import { useServerStore } from "../stores/useServerStore";
 import { usePeersStore } from "../stores/usePeersStore";
 import { useTransfersStore } from "../stores/useTransfersStore";
 import { pushProgress } from "../stores/useProgressStore";
@@ -94,6 +96,16 @@ export function useTauriEvents() {
     unlisteners.push(
       onIncomingRequest((req: IncomingRequestEvent) => {
         useIncomingStore.getState().setPending(req);
+      })
+    );
+
+    unlisteners.push(
+      onServerReady((info) => {
+        useServerStore.getState().setReady({
+          tls: info.tls,
+          empreinte: info.empreinte,
+          port: info.port,
+        });
       })
     );
 
