@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod events;
 pub mod http;
+pub mod tls;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Emitter;
@@ -104,19 +105,57 @@ pub fn run_tauri() {
             let http_handle = app.handle().clone();
             let ev_handle = app.handle().clone();
 
-            // --- Serveur HTTP (toujours en clair : le TLS reste à brancher, voir P1) ---
+            // --- Serveur HTTPS (certificat auto-signé, PSK exigée sur les transferts) ---
             tauri::async_runtime::spawn(async move {
-                let router = http::router(http::AppState::new(http_manager));
-                match tokio::net::TcpListener::bind("0.0.0.0:53317").await {
-                    Ok(l) => {
-                        tracing::info!("HTTP server listening on 0.0.0.0:53317");
-                        if let Err(e) = axum::serve(l, router).await {
-                            tracing::error!("http server error: {e}");
-                        }
+                let routeur = http::router(http::AppState::new(http_manager));
+                let (config_tls, empreinte) = match crate::tls::assurer_config_tls() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::error!("TLS indisponible : {e}");
+                        let _ = http_handle.emit("server_ready", serde_json::json!({"port":53317, "tls":false, "erreur":e}));
+                        return;
                     }
-                    Err(e) => tracing::error!("failed to bind http server: {e}"),
+                };
+                tracing::info!("empreinte TLS locale : {empreinte}");
+                let accepteur =
+                    tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config_tls));
+                let ecouteur = match tokio::net::TcpListener::bind("0.0.0.0:53317").await {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::error!("échec du bind HTTPS : {e}");
+                        return;
+                    }
+                };
+                tracing::info!("serveur HTTPS en écoute sur 0.0.0.0:53317");
+                let _ = http_handle.emit("server_ready", serde_json::json!({"port":53317, "tls":true}));
+                use hyper_util::rt::{TokioExecutor, TokioIo};
+                loop {
+                    let (flux_tcp, adresse) = match ecouteur.accept().await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            tracing::error!("acceptation refusée : {e}");
+                            continue;
+                        }
+                    };
+                    let accepteur = accepteur.clone();
+                    let routes = routeur.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let flux_tls = match accepteur.accept(flux_tcp).await {
+                            Ok(v) => v,
+                            Err(e) => {
+                                tracing::warn!("poignée de main TLS refusée depuis {adresse} : {e}");
+                                return;
+                            }
+                        };
+                        let io = TokioIo::new(flux_tls);
+                        let service = hyper_util::service::TowerToHyperService::new(routes);
+                        let _ = hyper_util::server::conn::auto::Builder::new(
+                            TokioExecutor::new(),
+                        )
+                        .serve_connection(io, service)
+                        .await;
+                    });
                 }
-                let _ = http_handle.emit("server_ready", serde_json::json!({"port":53317}));
             });
 
             // --- Listener mDNS PERSISTANT : créé une fois, jamais droppé ---

@@ -46,6 +46,20 @@ pub struct Health {
 #[derive(Deserialize)]
 pub struct CreateTransfer {
     pub manifest: rivaldsend_proto::TransferManifest,
+    /// Code d'appairage à 6 chiffres affiché à l'expéditeur (jamais réutilisé tel quel).
+    #[serde(default)]
+    pub code: String,
+}
+
+/// Vérifie le format du code d'appairage (6 chiffres).
+fn verifier_code(code: &str) -> Result<(), (StatusCode, String)> {
+    if code.len() != 6 || !code.bytes().all(|c| c.is_ascii_digit()) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "code d'appairage invalide".into(),
+        ));
+    }
+    Ok(())
 }
 
 async fn health() -> Json<Health> {
@@ -68,11 +82,13 @@ async fn create_transfer(
     rivaldsend_proto::validation::validate_manifest(&body.manifest)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
-    // Mémorise le manifeste et une PSK provisoire pour ce transfert.
-    // TODO(sécurité) : dériver la PSK du vrai code d'appairage échangé en QR,
-    // pas d'une valeur codée en dur.
+    // Mémorise le manifeste et dérive la PSK du code d'appairage réel.
+    // Le sel reprend l'identifiant du transfert, connu des deux pairs, de sorte
+    // que l'expéditeur retrouve la même PSK sans qu'elle transite en clair.
+    verifier_code(&body.code)?;
     let identifiant = body.manifest.transfer_id.to_string();
-    let psk = psk_en_hex(rivaldsend_core::pairing::derive_psk("123456", b"salt-1"));
+    let sel = body.manifest.transfer_id.as_bytes().to_vec();
+    let psk = psk_en_hex(rivaldsend_core::pairing::derive_psk(&body.code, &sel));
 
     {
         let mut cache = s.psk_cache.write().await;
@@ -202,39 +218,51 @@ async fn complete_transfer(
         return Err((StatusCode::NOT_FOUND, "transfert inconnu".into()));
     };
 
-    // 2. Vérifie l'empreinte BLAKE3 de chaque fichier du dossier partiel.
-    // Limite actuelle : le receveur écrit un seul data.bin clairsemé, donc la
-    // vérification fichier par fichier reste partielle tant que l'assemblage
-    // final par fichier n'est pas branché.
+    // 2. Vérifie l'intégrité puis livre vers le dossier de téléchargement.
+    // Limite assumée : un seul fichier par transfert dans cette version.
+    // Les transferts multi-fichiers sont refusés explicitement au lieu d'un faux succès.
+    if manifeste.files.len() != 1 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "transferts multi-fichiers non pris en charge dans cette version".into(),
+        ));
+    }
+    let entree = &manifeste.files[0];
+    if !rivaldsend_proto::validation::is_safe_relative_path(&entree.relative_path) {
+        return Err((StatusCode::BAD_REQUEST, "chemin relatif dangereux".into()));
+    }
     let dossier_partiel = rivaldsend_core::manager::TransferManager::default_partial_dir(uuid);
-    for entree in &manifeste.files {
-        let chemin = dossier_partiel.join(&entree.relative_path);
-        if !chemin.exists() {
-            // Cas courant aujourd'hui : un seul data.bin au lieu d'un fichier par entrée.
-            // On vérifie au moins que des données ont bien été reçues.
-            let donnees = dossier_partiel.join("data.bin");
-            if !donnees.exists() {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    format!("fichier manquant : {}", entree.relative_path),
-                ));
-            }
-            continue;
-        }
-        let empreinte = rivaldsend_core::pipeline::hasher::hash_file(&chemin)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        if empreinte != entree.blake3 {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("empreinte invalide pour {}", entree.relative_path),
-            ));
-        }
+    let donnees = dossier_partiel.join("data.bin");
+    if !donnees.exists() {
+        return Err((StatusCode::BAD_REQUEST, "données reçues manquantes".into()));
+    }
+    // Contrôle de taille avant le hachage (garde-fou peu coûteux).
+    let taille = tokio::fs::metadata(&donnees)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .len();
+    if taille != entree.size {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("taille inattendue : {taille} au lieu de {}", entree.size),
+        ));
+    }
+    let empreinte = rivaldsend_core::pipeline::hasher::hash_file(&donnees)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if empreinte.to_lowercase() != entree.blake3.to_lowercase() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("empreinte invalide pour {}", entree.relative_path),
+        ));
     }
 
-    // 3. Marque le transfert comme terminé et nettoie les mémoires.
-    s.manager
-        .finalize_transfer(uuid)
+    // 3. Livre le fichier et nettoie les mémoires.
+    let dossier_base = s.manager.get_download_dir().await;
+    let destination = dossier_base.join(&entree.relative_path);
+    let livree = s
+        .manager
+        .finalize_transfer(uuid, destination)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     {
@@ -247,7 +275,7 @@ async fn complete_transfer(
     }
 
     Ok(Json(
-        serde_json::json!({"transfer_id": id, "status": "completed"}),
+        serde_json::json!({"transfer_id": id, "status": "completed", "chemin": livree}),
     ))
 }
 

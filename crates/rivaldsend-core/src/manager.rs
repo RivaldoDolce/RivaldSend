@@ -121,12 +121,25 @@ impl TransferManager {
         Ok(removed)
     }
 
-    pub async fn finalize_transfer(&self, id: Uuid) -> Result<(), CoreError> {
-        // Nettoie le dossier partiel après le succès et marque le transfert comme terminé.
-        // Limite connue : l'assemblage final vers le dossier de téléchargement
-        // reste à brancher (les octets restent dans data.bin pour l'instant).
+    pub async fn finalize_transfer(
+        &self,
+        id: Uuid,
+        destination: std::path::PathBuf,
+    ) -> Result<std::path::PathBuf, CoreError> {
+        // Livre le contenu reçu vers la destination finale, puis nettoie.
         let dossier_partiel = Self::default_partial_dir(id);
+        let source = dossier_partiel.join("data.bin");
+        if !source.exists() {
+            return Err(CoreError::NotFound(format!("données manquantes pour {id}")));
+        }
+        if let Some(parent) = destination.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        // Copie puis suppression : simple et robuste entre volumes.
+        tokio::fs::copy(&source, &destination).await?;
         let _ = tokio::fs::remove_dir_all(&dossier_partiel).await;
+        let chemin_reprise = self.resume_path(id);
+        let _ = tokio::fs::remove_file(&chemin_reprise).await;
 
         // Met à jour le statut.
         let mut s = self.statuses.lock().await;
@@ -134,7 +147,7 @@ impl TransferManager {
             *statut = TransferStatus::Completed;
         }
 
-        Ok(())
+        Ok(destination)
     }
 
     pub async fn set_default_download_dir(&self, dir: std::path::PathBuf) -> Result<(), CoreError> {

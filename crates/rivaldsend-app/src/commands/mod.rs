@@ -288,23 +288,39 @@ pub async fn connect_by_ip(app: AppHandle, ip: String, port: u16) -> Result<crat
     // 1. Vérifier la connectivité
     ping_peer(ip.clone(), port).await?;
 
-    // 2. Récupérer l'identité du peer via HTTP
-    let url = format!("http://{}:{}/v1/identity", ip, port);
+    // 2. Récupérer l'identité du pair en HTTPS d'abord, HTTP en repli.
+    // Le certificat est auto-signé : on accepte l'invalidité ici car
+    // l'authentification réelle passe par la PSK et l'empreinte d'appareil
+    // échangée hors bande (QR). Le TLS ne sert qu'à chiffrer le transport.
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
+        .danger_accept_invalid_certs(true)
         .build()
         .map_err(|e| e.to_string())?;
 
-    let response = client.get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("HTTP error: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("HTTP {}", response.status()));
+    let mut reponse = None;
+    let mut derniere_erreur = String::new();
+    for schema in ["https", "http"] {
+        let url = format!("{schema}://{ip}:{port}/v1/identity");
+        match client.get(&url).send().await {
+            Ok(r) if r.status().is_success() => {
+                reponse = Some(r);
+                break;
+            }
+            Ok(r) => {
+                derniere_erreur = format!("HTTP {}", r.status());
+            }
+            Err(e) => {
+                derniere_erreur = format!("{schema} : {e}");
+            }
+        }
     }
+    let reponse = match reponse {
+        Some(r) => r,
+        None => return Err(format!("pair injoignable ({derniere_erreur})")),
+    };
 
-    let identity: serde_json::Value = response.json().await
+    let identity: serde_json::Value = reponse.json().await
         .map_err(|e| e.to_string())?;
 
     let name = identity["name"].as_str().unwrap_or(&format!("Appareil {ip}")).to_string();
