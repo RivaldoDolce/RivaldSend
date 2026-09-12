@@ -37,13 +37,37 @@ pub struct DeviceInfoResponse {
     pub fingerprint_short: String,
     pub port: u16,
 }
+/// Choisit l'IP à annoncer : de préférence une IPv4 de réseau local privé
+/// (celle que le téléphone du même Wi-Fi pourra joindre), sinon la première
+/// IPv4 disponible, sinon le loopback.
+fn choisir_ip_locale(interfaces: &[(String, std::net::IpAddr)]) -> String {
+    use std::net::IpAddr;
+    let mut premiere_ipv4: Option<String> = None;
+    for (_, ip) in interfaces {
+        if let IpAddr::V4(v4) = ip {
+            if v4.is_loopback() || v4.is_link_local() {
+                continue;
+            }
+            let texte = v4.to_string();
+            if premiere_ipv4.is_none() {
+                premiere_ipv4 = Some(texte.clone());
+            }
+            let o = v4.octets();
+            let lan_prive = o[0] == 10
+                || (o[0] == 172 && (16..=31).contains(&o[1]))
+                || (o[0] == 192 && o[1] == 168);
+            if lan_prive {
+                return texte;
+            }
+        }
+    }
+    premiere_ipv4.unwrap_or_else(|| "127.0.0.1".into())
+}
+
 #[tauri::command]
 pub fn get_device_info() -> DeviceInfoResponse {
-    let ip = rivaldsend_core::discovery::list_interfaces()
-        .into_iter()
-        .find(|(_, ip)| ip.is_ipv4())
-        .map(|(_, ip)| ip.to_string())
-        .unwrap_or_else(|| "127.0.0.1".into());
+    let interfaces = rivaldsend_core::discovery::list_interfaces();
+    let ip = choisir_ip_locale(&interfaces);
 
     let fingerprint = get_or_create_fingerprint();
     let fingerprint_short = fingerprint.chars().take(8).collect();
@@ -93,42 +117,49 @@ fn code_appairage_valide(code: &str) -> bool {
 pub async fn start_transfer(
     app: AppHandle,
     manager: State<'_, Arc<rivaldsend_core::manager::TransferManager>>,
+    cache: State<'_, crate::PeerCacheState>,
     peerId: String,
     filePaths: Vec<String>,
     code: Option<String>,
 ) -> Result<StartTransferResponse, String> {
-    if filePaths.is_empty() {
-        return Err("aucun fichier".into());
+    // Limite assumée : un seul fichier par transfert (le receveur refuse le reste).
+    if filePaths.len() != 1 {
+        return Err("un seul fichier par transfert dans cette version".into());
     }
-    for p in &filePaths {
-        let path = std::path::Path::new(p);
-        if !path.exists() {
-            return Err(format!("fichier introuvable: {p}"));
-        }
+    let chemin = std::path::PathBuf::from(&filePaths[0]);
+    if !chemin.exists() {
+        return Err(format!("fichier introuvable: {}", filePaths[0]));
     }
 
+    // Le code d'appairage est obligatoire : le receveur en dérive la PSK.
+    let Some(c) = code else {
+        return Err("code d'appairage requis".into());
+    };
+    if !code_appairage_valide(&c) {
+        return Err("code d'appairage invalide".into());
+    }
+
+    // Retrouver l'adresse du pair dans le cache de découverte.
+    let (ip, port) = {
+        let garde = cache.0.lock().await;
+        garde
+            .values()
+            .map(|(_, ev)| ev)
+            .find(|ev| ev.id == peerId)
+            .map(|ev| (ev.ip.clone(), ev.port))
+    }
+    .ok_or_else(|| "pair introuvable, reconnectez-vous".to_string())?;
+
     // Calculer la taille totale réelle
-    let total_bytes: u64 = filePaths.iter()
-        .filter_map(|p| std::fs::metadata(p).ok())
-        .map(|m| m.len())
-        .sum();
+    let total_bytes: u64 = std::fs::metadata(&chemin).map(|m| m.len()).unwrap_or(0);
 
     let transfer_id = Uuid::new_v4();
 
-    // Mémoriser le code d'appairage pour le futur travailleur d'envoi HTTPS.
-    // Le receveur dérive la même PSK à partir de ce code et de l'identifiant.
-    if let Some(c) = code {
-        if !code_appairage_valide(&c) {
-            return Err("code d'appairage invalide".into());
-        }
-        manager.set_pairing_code(transfer_id, c).await;
-    }
+    // Mémoriser le code et la cible pour le travailleur d'envoi HTTPS.
+    manager.set_pairing_code(transfer_id, c.clone()).await;
 
-    // Enfiler TOUS les fichiers (pas juste le premier)
-    for path_str in &filePaths {
-        let path = std::path::PathBuf::from(path_str);
-        let _ = manager.enqueue(path).await;
-    }
+    // Enfiler le fichier pour suivi local
+    let _ = manager.enqueue(chemin.clone()).await;
 
     // Associer le peer cible
     manager.set_target_peer(transfer_id, peerId).await;
@@ -136,11 +167,22 @@ pub async fn start_transfer(
     // Démarrer le transfert
     manager.start_transfer(transfer_id).await.map_err(|e| e.to_string())?;
 
+    // Lancer le travailleur d'envoi HTTPS (annonce + morceaux + achèvement).
+    crate::sender::spawn_envoi(
+        app.clone(),
+        manager.inner().clone(),
+        transfer_id,
+        chemin,
+        ip,
+        port,
+        c,
+    );
+
     // Émettre avec total_bytes réel
     let _ = app.emit("transfer_progress", crate::events::ProgressEvent {
         transfer_id: transfer_id.to_string(),
         bytes_done: 0,
-        total_bytes,  // ← taille réelle
+        total_bytes,
         speed_bps: 0,
         eta_secs: 0,
         status: "running".into(),

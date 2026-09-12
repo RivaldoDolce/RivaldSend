@@ -29,7 +29,9 @@ tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.6", features = ["trace", "cors", "limit"] }
 mdns-sd = "0.11"
 hostname = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 tokio-rustls = "0.26"
 rustls-pemfile = "2.1"
 rcgen = "0.13"
 subtle = "2.5"
+tempfile = "3.10"

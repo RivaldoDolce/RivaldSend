@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod events;
 pub mod http;
+pub mod sender;
 pub mod tls;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -43,7 +44,14 @@ pub fn build_router() -> axum::Router {
     http::router(http::AppState::new(manager))
 }
 
+/// Point d'entrée mobile (génère le wrapper JNI sur Android).
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run_tauri() {
+    // rustls refuse de choisir seul entre les providers `ring` et `aws-lc-rs`
+    // (tous deux activés via reqwest) et panique sans défaut explicite.
+    // On fige `ring` ici, avant tout usage TLS (serveur comme client).
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let should_block = rivaldsend_core::firewall::detect_network_profile()
         .map(|p| rivaldsend_core::firewall::should_block_server(&p))
         .unwrap_or(false);

@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+# Requis pour Android : la lib JNI (.so) + rlib pour le desktop.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [dependencies]
 rivaldsend-proto = { path = "../rivaldsend-proto" }
 rivaldsend-core = { path = "../rivaldsend-core" }
@@ -37,6 +41,10 @@ hyper-util = { workspace = true }
 rcgen = { workspace = true }
 subtle = { workspace = true }
 tokio-rustls = { workspace = true }
+chrono = { workspace = true }
 
 [build-dependencies]
 tauri-build = { version = "2.4", features = [] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

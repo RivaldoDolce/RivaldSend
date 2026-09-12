@@ -75,6 +75,13 @@ pub fn detect_network_profile() -> Result<NetworkProfile, CoreError> {
     detect_windows_firewall()
 }
 
+/// Détection sur Android : pas de notion public/privé accessible simplement.
+/// On ne bloque jamais le serveur sur mobile, le partage y est explicite.
+#[cfg(target_os = "android")]
+pub fn detect_network_profile() -> Result<NetworkProfile, CoreError> {
+    Ok(NetworkProfile::Private)
+}
+
 /// Détection générique : appelle la méthode adaptée à la plateforme.
 pub fn detect_network_profile_generic() -> Result<NetworkProfile, CoreError> {
     #[cfg(target_os = "macos")]

@@ -90,6 +90,13 @@ impl TransferManager {
     pub async fn pairing_code(&self, id: &Uuid) -> Option<String> {
         self.codes.lock().await.get(id).cloned()
     }
+    /// Marque un transfert sortant comme terminé (succès côté expéditeur).
+    pub async fn marquer_termine(&self, id: Uuid) {
+        let mut s = self.statuses.lock().await;
+        if let Some(statut) = s.get_mut(&id) {
+            *statut = TransferStatus::Completed;
+        }
+    }
     pub async fn resume(&self, id: Uuid) -> Result<Option<crate::resume::ResumeState>, CoreError> {
         let path = self.resume_dir.join(format!("{id}.json"));
         crate::resume::load(&path).await
