@@ -146,7 +146,7 @@ export function SendModal() {
       <div className="fixed inset-0 z-50" onClick={closeSendModal}>
         <div className="absolute inset-0 bg-black/40" />
         <div
-          className="sheet open absolute bottom-0 left-0 right-0 border-t border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
+          className="sheet open absolute bottom-0 left-0 right-0 max-h-[calc(100dvh-3rem)] overflow-y-auto border-t border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
@@ -159,7 +159,7 @@ export function SendModal() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeSendModal}>
       <div
-        className="animate-scale-in w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
+        className="animate-scale-in mx-4 max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <SendModalContent onClose={closeSendModal} />

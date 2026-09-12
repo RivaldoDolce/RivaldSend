@@ -71,7 +71,7 @@ export function DropZone({ onFilesSelected, onPathsSelected }: Props) {
       }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
-      className={`rivaldsend-dropzone group relative overflow-hidden rounded-[24px] p-8 sm:p-10 ${dragging ? "rivaldsend-dropzone-active" : ""}`}
+      className={`rivaldsend-dropzone group relative overflow-hidden rounded-[24px] p-5 sm:p-10 ${dragging ? "rivaldsend-dropzone-active" : ""}`}
     >
       <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.05] pointer-events-none" style={{ backgroundImage: `url(/assets/concept-transfer.webp)`, backgroundSize: `280px`, backgroundRepeat: `no-repeat`, backgroundPosition: `right -20px center` }} aria-hidden="true" />
       {pending.length > 0 && (

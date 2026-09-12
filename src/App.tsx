@@ -76,13 +76,13 @@ const MobileBottomNav = memo(function MobileBottomNav() {
     { id: "settings", label: "Param.", icon: Settings },
   ] as const;
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--surface)]/95 safe-area-bottom">
-      <div className="mx-auto grid max-w-md grid-cols-5 gap-1 px-2 py-2">
+    <nav className="fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--surface)] shadow-[0_-8px_24px_rgba(0,0,0,0.10)] safe-area-bottom">
+      <div className="mx-auto grid max-w-md grid-cols-5 gap-1 px-3 pb-2.5 pt-2.5">
         {tabs.map((t) => {
           const active = mobileTab === t.id;
           return (
-            <button key={t.id} onClick={() => setMobileTab(t.id as typeof mobileTab)} className={`flex flex-col items-center gap-1 rounded-2xl py-2 text-xs font-medium transition-colors ${active ? "bg-[var(--accent)] text-white" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"}`}>
-              <t.icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.7} /> {t.label}
+            <button key={t.id} onClick={() => setMobileTab(t.id as typeof mobileTab)} className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl py-2 text-xs font-medium transition-colors ${active ? "bg-[var(--accent)] text-white shadow-sm" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"}`}>
+              <t.icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.7} /> {t.label}
             </button>
           );
         })}
@@ -109,14 +109,14 @@ const TransferRowInline = memo(function TransferRowInline({ id, selectedId, onSe
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-[var(--accent)]">
             <FileText className="h-6 w-6" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold truncate">{tr.files[0]?.path?.split(/[\\/]/).pop() ?? tr.id}</p>
-            <div className="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-[var(--background)]">
+            <div className="mt-1 h-1.5 w-full max-w-40 overflow-hidden rounded-full bg-[var(--background)]">
               <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%`, transition: "width .3s" }} />
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <span className="text-xs font-medium text-[var(--text-secondary)]">{(speedBps / 1024 / 1024).toFixed(1)} Mo/s</span>
           {isActive && (
             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
@@ -290,8 +290,8 @@ function AppInner() {
   }
 
   return (
-    <div className="min-h-screen app-aurora text-[var(--text-primary)] antialiased">
-      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]">
+    <div className="min-h-dvh overflow-x-clip app-aurora text-[var(--text-primary)] antialiased">
+      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)] safe-area-top">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between px-4 sm:px-6 py-3.5">
           <div className="flex items-center gap-3">
             <img src={darkMode ? "/assets/symbol-on-dark.webp" : "/assets/symbol-on-light.webp"} alt="RivaldSend" width="36" height="36" decoding="async" className="h-9 w-9 rounded-xl bg-white dark:bg-zinc-800 p-1.5 shadow-sm object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
@@ -319,7 +319,7 @@ function AppInner() {
 
       <div className="mx-auto max-w-[1280px] px-4 sm:px-6 py-6">
         {isMobile ? (
-          <div className="space-y-4 pb-20">
+          <div className="space-y-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))]">
             {mobileTab === "home" && <TransferThreePane onFiles={handleFiles} onPaths={handlePaths} />}
             {mobileTab === "discovery" && <div className="fade-in"><DiscoveryView /></div>}
             {mobileTab === "send" && (
@@ -352,7 +352,7 @@ function AppInner() {
 
       {isMobile && <MobileBottomNav />}
       {showProgressOverlay && activeTransfer && (
-        <div className="fixed inset-0 z-40 overflow-y-auto bg-[var(--background)] px-4 py-6 pb-24">
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-[var(--background)] px-4 pt-[calc(1.5rem+env(safe-area-inset-top,0px))] pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
           <div className="mx-auto max-w-md space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold">Transfert en cours</h2>
@@ -369,7 +369,7 @@ function AppInner() {
       <CommandPalette />
 
       {!isMobile ? <StatusBar /> : (
-        <footer className="border-t border-[var(--border)] py-3 text-center text-xs text-[var(--text-tertiary)] pb-[env(safe-area-inset-bottom)]">
+        <footer className="border-t border-[var(--border)] pt-3 text-center text-xs text-[var(--text-tertiary)] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
           RivaldSend v{APP_VERSION}
         </footer>
       )}

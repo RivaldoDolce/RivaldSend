@@ -31,8 +31,8 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
   const current = STEPS[step]!;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(rgba(9,9,11,.55), rgba(9,9,11,.85)), url(/assets/onboarding-bg.webp)` }}>
-      <div className="text-center max-w-md rounded-[24px] border border-white/10 bg-white/90 dark:bg-zinc-900/80 p-8 shadow-xl backdrop-blur">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto bg-cover bg-center p-5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))]" style={{ backgroundImage: `linear-gradient(rgba(9,9,11,.55), rgba(9,9,11,.85)), url(/assets/onboarding-bg.webp)` }}>
+      <div className="text-center w-full max-w-md rounded-[24px] border border-white/10 bg-white/90 dark:bg-zinc-900/80 p-5 sm:p-8 shadow-xl backdrop-blur">
         <div
           className="w-24 h-24 mx-auto mb-8 rounded-[28px] flex items-center justify-center"
           style={{ backgroundColor: `${current.color}15` }}

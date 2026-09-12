@@ -37,7 +37,7 @@ export function SettingsView() {
         <div>
           <label className="text-xs font-medium text-[var(--text-secondary)]">{t("downloadDir")}</label>
           <div className="mt-1 flex gap-2">
-            <input value={downloadDir} onChange={(e) => setDownloadDir(e.target.value)} className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm mono" />
+            <input value={downloadDir} onChange={(e) => setDownloadDir(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm mono" />
             <button onClick={browseDir} className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white">Parcourir</button>
           </div>
         </div>

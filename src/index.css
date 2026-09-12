@@ -119,10 +119,19 @@ button, input, select, textarea { font-family: inherit; }
 .animate-scale-in { animation: scaleIn 200ms cubic-bezier(0.16,1,0.3,1); }
 @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
-/* Mobile safe areas */
-@supports (padding: env(safe-area-inset-bottom)) {
-  .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
-  .safe-area-top { padding-top: env(safe-area-inset-top); }
+/* Barres système mobiles : l'app reste entre l'encoche et la navigation.
+   Utiliser ces classes sur les bords collés aux barres (header, nav basse).
+   Elles ne touchent qu'un seul côté pour ne pas écraser le padding de base. */
+.safe-area-top { padding-top: env(safe-area-inset-top, 0px); }
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.safe-area-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+/* Repli pour les WebView anciennes sans env() : marge minimale lisible. */
+@supports not (padding-top: env(safe-area-inset-top)) {
+  .safe-area-top { padding-top: 16px; }
+  .safe-area-bottom { padding-bottom: 16px; }
 }
 
 /* Bottom sheet for mobile */

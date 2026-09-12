@@ -99,14 +99,14 @@ function ManualConnectRow() {
         value={ip}
         onChange={(e) => setIp(e.target.value)}
         placeholder="IP manuelle (ex: 192.168.1.10)"
-        className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-tertiary)]"
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-tertiary)]"
         onKeyDown={(e) => e.key === "Enter" && handleConnect()}
       />
       <input
         value={port}
         onChange={(e) => setPort(e.target.value)}
         placeholder="Port"
-        className="w-16 bg-transparent text-right text-sm mono outline-none placeholder:text-[var(--text-tertiary)]"
+        className="w-16 shrink-0 bg-transparent text-right text-sm mono outline-none placeholder:text-[var(--text-tertiary)]"
       />
       <button
         onClick={handleConnect}
