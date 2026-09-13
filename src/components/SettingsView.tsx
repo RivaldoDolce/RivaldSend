@@ -2,10 +2,12 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import { useServerStore } from "../stores/useServerStore";
 import { useTranslation } from "react-i18next";
 import { pickFolder, setDownloadDirBackend } from "../lib/tauri-bridge";
+import { useDeviceContext } from "../hooks/useDeviceContext";
 import { useToast } from "./toast/Toast";
 
 export function SettingsView() {
   const { t, i18n } = useTranslation();
+  const { isMobile } = useDeviceContext();
   const { downloadDir, setDownloadDir, darkMode, toggleDarkMode, language, setLanguage, notifications, setNotifications } = useSettingsStore();
   const tls = useServerStore((s) => s.tls);
   const empreinte = useServerStore((s) => s.empreinte);
@@ -37,9 +39,14 @@ export function SettingsView() {
         <div>
           <label className="text-xs font-medium text-[var(--text-secondary)]">{t("downloadDir")}</label>
           <div className="mt-1 flex gap-2">
-            <input value={downloadDir} onChange={(e) => setDownloadDir(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm mono" />
-            <button onClick={browseDir} className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white">Parcourir</button>
+            <input value={downloadDir} onChange={(e) => setDownloadDir(e.target.value)} readOnly={isMobile} className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm mono" />
+            {!isMobile && (
+              <button onClick={browseDir} className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white">Parcourir</button>
+            )}
           </div>
+          {isMobile && (
+            <p className="mt-1 text-xs text-[var(--text-tertiary)]">Dossier géré par l'application (pas de sélecteur natif sur mobile).</p>
+          )}
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
           <span className="text-sm">{t("darkMode")}</span>

@@ -110,6 +110,60 @@ export async function openFileDialog(): Promise<string[] | null> {
   return invoke<string[] | null>("open_file_dialog");
 }
 
+export type PairingLink = { ip: string; port: number; code: string };
+
+// Analyse un lien rivaldsend://ip:port?code=XXXXXX&fp=... (QR, lien copié, deep link).
+export function parsePairingLink(url: string): PairingLink | null {
+  if (!url.startsWith("rivaldsend://")) return null;
+  const sansSchema = url.slice("rivaldsend://".length);
+  const [autorite = "", requete = ""] = sansSchema.split("?");
+  const [ip = "", portTexte] = autorite.split(":");
+  if (!ip) return null;
+  const params = new URLSearchParams(requete);
+  const code = (params.get("code") ?? "").trim().replace("-", "").toUpperCase();
+  if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code) && !/^[0-9]{6}$/.test(code)) return null;
+  return { ip, port: Number(portTexte) || 53317, code };
+}
+
+// Scanne un QR avec la caméra (mobile uniquement, plugin barcode-scanner).
+// Retourne null si l'utilisateur annule.
+export async function scanQrCode(): Promise<PairingLink | null> {
+  const { scan } = await import("@tauri-apps/plugin-barcode-scanner");
+  const res = await scan({ cameraDirection: "back", windowed: false });
+  if (!res?.content) return null;
+  return parsePairingLink(res.content.trim());
+}
+
+// Dossier de réception sur mobile : le sélecteur de dossier natif n'existe pas
+// via le plugin dialog, donc on essaie le dossier Download public puis on
+// replie vers un sous-dossier privé de l'app (toujours accessible en écriture).
+export async function initMobileDownloadDir(): Promise<string> {
+  const { downloadDir, appDataDir } = await import("@tauri-apps/api/path");
+  const essais: string[] = [];
+  try {
+    essais.push(await downloadDir());
+  } catch {
+    // Pas de dossier public accessible, on passe au repli privé.
+  }
+  try {
+    essais.push((await appDataDir()) + "/RivaldSend");
+  } catch {
+    // Dernier recours géré par le backend (/tmp ou équivalent).
+  }
+  let dernierErreur: unknown = null;
+  for (const dossier of essais) {
+    try {
+      await setDownloadDirBackend(dossier);
+      return dossier;
+    } catch (err) {
+      dernierErreur = err;
+    }
+  }
+  throw dernierErreur instanceof Error
+    ? dernierErreur
+    : new Error("Aucun dossier de réception accessible");
+}
+
 // ============ EVENT TYPES ============
 
 export type TransferProgressEvent = {

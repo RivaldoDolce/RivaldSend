@@ -10,6 +10,8 @@
     "core:menu:default",
     "core:tray:default",
     "dialog:allow-open",
+    "barcode-scanner:allow-scan",
+    "barcode-scanner:allow-cancel",
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "$APPLOCALDATA/**" }, { "path": "$DOWNLOAD/**" }]

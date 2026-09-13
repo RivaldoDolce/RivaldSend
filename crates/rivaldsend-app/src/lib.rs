@@ -68,7 +68,7 @@ pub fn run_tauri() {
 
     // 3. Publication du service local
     let txt_properties: HashMap<String, String> = HashMap::from([
-        ("device_name".to_string(), "RivaldSend".to_string()),
+        ("device_name".to_string(), device_info.name.clone()),
         ("platform".to_string(), std::env::consts::OS.to_string()),
         ("fingerprint_short".to_string(), device_info.fingerprint_short.clone()),
     ]);
@@ -98,7 +98,14 @@ pub fn run_tauri() {
     ));
     let http_manager = manager.clone();
 
-    tauri::Builder::default()
+    // Le scan QR n'existe que sur mobile (la crate est vide sur desktop).
+    #[allow(unused_mut)]
+    let mut constructeur = tauri::Builder::default();
+    #[cfg(mobile)]
+    {
+        constructeur = constructeur.plugin(tauri_plugin_barcode_scanner::init());
+    }
+    constructeur
         .manage(manager)
         .manage(MdnsState { daemon })
         .manage(PeerCacheState::default())

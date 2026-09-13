@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { Search, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar } from "lucide-react";
+import { Search, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar, QrCode } from "lucide-react";
+import { useDeviceContext } from "../hooks/useDeviceContext";
 import { usePeersStore } from "../stores/usePeersStore";
 import { VerifySheet } from "./VerifySheet";
 import { useToast } from "./toast/Toast";
@@ -75,6 +76,7 @@ function usePeerLatency(ip: string, port: number) {
 function ManualConnectRow() {
   const [ip, setIp] = useState("");
   const [port, setPort] = useState("53317");
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -85,36 +87,50 @@ function ManualConnectRow() {
       const { connectByIp } = await import("../lib/tauri-bridge");
       const peer = await connectByIp(ip.trim(), Number(port) || 53317);
       usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: peer.platform as never, latencyMs: undefined, trusted: peer.trusted });
+      const pin = code.trim().replace("-", "").toUpperCase();
+      if (pin) usePeersStore.getState().setPairingCode(peer.id, pin);
       toast.success("Appareil ajouté", peer.name);
     } catch (err) {
       console.error("[discovery] connect_by_ip:", err);
       toast.error("Appareil injoignable", "Vérifiez IP, port et pare-feu.");
     } finally { setBusy(false); }
-  }, [ip, port, toast]);
+  }, [ip, port, code, toast]);
 
   return (
-    <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
-      <Globe className="h-4 w-4 shrink-0 text-[var(--text-tertiary)]" />
-      <input
-        value={ip}
-        onChange={(e) => setIp(e.target.value)}
-        placeholder="IP manuelle (ex: 192.168.1.10)"
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-tertiary)]"
-        onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-      />
-      <input
-        value={port}
-        onChange={(e) => setPort(e.target.value)}
-        placeholder="Port"
-        className="w-16 shrink-0 bg-transparent text-right text-sm mono outline-none placeholder:text-[var(--text-tertiary)]"
-      />
-      <button
-        onClick={handleConnect}
-        disabled={!ip.trim() || busy}
-        className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-      >
-        {busy ? "..." : "Connecter"}
-      </button>
+    <div className="space-y-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+      <div className="flex items-center gap-2">
+        <Globe className="h-4 w-4 shrink-0 text-[var(--text-tertiary)]" />
+        <input
+          value={ip}
+          onChange={(e) => setIp(e.target.value)}
+          placeholder="IP manuelle (ex: 192.168.1.10)"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-tertiary)]"
+          onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+        />
+        <input
+          value={port}
+          onChange={(e) => setPort(e.target.value)}
+          placeholder="Port"
+          className="w-16 shrink-0 bg-transparent text-right text-sm mono outline-none placeholder:text-[var(--text-tertiary)]"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Code PIN affiché en face (ex : AB3-9XZ)"
+          maxLength={7}
+          className="mono min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-sm uppercase tracking-widest outline-none placeholder:normal-case placeholder:tracking-normal"
+          onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+        />
+        <button
+          onClick={handleConnect}
+          disabled={!ip.trim() || busy}
+          className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+        >
+          {busy ? "..." : "Connecter"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -133,7 +149,9 @@ export function DiscoveryView() {
   const peers = usePeersStore((s) => s.peers);
   const isDiscovering = usePeersStore((s) => s.isDiscovering);
   const setDiscovering = usePeersStore((s) => s.setDiscovering);
+  const { isMobile } = useDeviceContext();
   const [query, setQuery] = useState("");
+  const [scanning, setScanning] = useState(false);
   const q = useDebouncedValue(query, 120);
 
   const scanningRef = useRef(false);
@@ -174,6 +192,25 @@ export function DiscoveryView() {
     void runScan(false);
   }, [runScan]);
 
+  const handleScanQr = useCallback(async () => {
+    if (scanning) return;
+    setScanning(true);
+    try {
+      const { scanQrCode, connectByIp } = await import("../lib/tauri-bridge");
+      const lien = await scanQrCode();
+      if (!lien) return; // Annulé par l'utilisateur.
+      const peer = await connectByIp(lien.ip, lien.port);
+      usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: peer.platform as never, latencyMs: undefined, trusted: peer.trusted });
+      usePeersStore.getState().setPairingCode(peer.id, lien.code);
+      toastRef.current.success("QR scanné", `Appareil ajouté : ${peer.name}`);
+    } catch (err) {
+      console.error("[discovery] scan QR:", err);
+      toastRef.current.error("Scan impossible", "Vérifiez la permission caméra puis réessayez.");
+    } finally {
+      setScanning(false);
+    }
+  }, [scanning]);
+
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
     const list = !n
@@ -197,6 +234,16 @@ export function DiscoveryView() {
         {isDiscovering ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
         {isDiscovering ? t("discoverySearching") : t("discoverySearchNearby")}
       </button>
+      {isMobile && (
+        <button
+          onClick={handleScanQr}
+          disabled={scanning}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-6 py-3 text-sm font-semibold hover:bg-[var(--surface-hover)] disabled:opacity-60"
+        >
+          <QrCode className="h-4 w-4" />
+          {scanning ? t("discoverySearching") : t("scanQr")}
+        </button>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />

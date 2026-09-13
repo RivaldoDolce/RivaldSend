@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, useRef, memo } from "react";
 import { Send, History, Settings, Shield, Sun, Moon, Home, Inbox, Wifi, Pause, X, FileText } from "lucide-react";
 import { cancelTransfer, pauseTransfer, resumeTransfer } from "./lib/tauri-bridge";
 import { checkFirewall } from "./lib/tauri-bridge";
@@ -262,6 +262,8 @@ function AppInner() {
     });
   }, []);
 
+  const initDossierMobile = useRef(false);
+
   const handleFiles = useCallback(
     (files: File[]) => {
       usePeersStore.getState().openSendModal(files.map((f) => ({ path: f.name, size: f.size })));
@@ -282,6 +284,17 @@ function AppInner() {
   }, []);
 
   const { isMobile } = useDeviceContext();
+  useEffect(() => {
+    // Sur mobile, aucun sélecteur de dossier natif : on initialise le dossier
+    // de réception une fois (Download public si accessible, sinon privé).
+    if (!isMobile || initDossierMobile.current) return;
+    initDossierMobile.current = true;
+    import("./lib/tauri-bridge").then(({ initMobileDownloadDir }) =>
+      initMobileDownloadDir()
+        .then((dossier) => useSettingsStore.getState().setDownloadDir(dossier))
+        .catch((err) => console.warn("[mobile] dossier de réception :", err))
+    );
+  }, [isMobile]);
   const activeTransfer = useTransfersStore((s) => s.transfers.find((t) => t.id === s.selectedTransferId));
   const showProgressOverlay = isMobile && !!activeTransfer && (activeTransfer.status === "running" || activeTransfer.status === "paused");
 
