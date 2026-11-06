@@ -33,8 +33,15 @@ export const usePeersStore = create<PeersState>()(
     setPeers: (peers) => set({ peers }),
     addPeer: (peer) =>
       set((s) => {
+        // Anti-doublon : un même appareil peut annoncer plusieurs adresses
+        // (IPv4 + IPv6). Sans cela, la liste affiche deux lignes identiques.
         const dupIdx = s.peers.findIndex(
-          (p) => p.id === peer.id || (p.ip === peer.ip && p.port === peer.port)
+          (p) =>
+            p.id === peer.id ||
+            (p.ip === peer.ip && p.port === peer.port) ||
+            (p.fingerprintShort &&
+              peer.fingerprintShort &&
+              p.fingerprintShort === peer.fingerprintShort)
         );
         if (dupIdx !== -1) {
           const existing = s.peers[dupIdx]!;

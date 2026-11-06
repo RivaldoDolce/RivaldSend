@@ -20,9 +20,13 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
 
   const handleSend = useCallback(async () => {
     if (!selectedPeer) return;
-    const code = usePeersStore.getState().pairingCodes[selectedPeer.id];
-    if (!code) {
-      toast.error("Code requis", "Approuvez d'abord l'appareil avec son code d'appairage.");
+    // Pair apparie : le secret est connu des deux cotes, aucun code a saisir.
+    // Sinon, le code memorise lors de l'appairage est reutilise.
+    const code = selectedPeer.trusted
+      ? undefined
+      : usePeersStore.getState().pairingCodes[selectedPeer.id];
+    if (!selectedPeer.trusted && !code) {
+      toast.error("Code requis", "Appariez d'abord cet appareil depuis l'onglet Decouverte.");
       return;
     }
     const pendingTransferId = crypto.randomUUID();
@@ -45,7 +49,7 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
         filePaths: pendingFiles.map((f) => f.path),
         code,
       });
-      const realId = (res as { transferId?: string; transfer_id?: string })?.transferId ?? (res as { transfer_id?: string })?.transfer_id ?? pendingTransferId;
+      const realId = res?.transferId ?? pendingTransferId;
       if (realId !== pendingTransferId) {
         useTransfersStore.getState().removeTransfer(pendingTransferId);
         useTransfersStore.getState().addTransfer({ ...transfer, id: realId });
@@ -55,7 +59,7 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
       const message = err instanceof Error ? err.message : String(err ?? "Erreur inconnue");
       console.error("[SendModal] startTransfer failed:", err);
       useTransfersStore.getState().updateTransfer(pendingTransferId, { status: "failed", error: message });
-      toast.error("Échec du démarrage", "Impossible de contacter l'appareil");
+      toast.error("Échec du démarrage", message);
     }
   }, [selectedPeer, pendingFiles, totalSize, addTransfer, onClose, toast]);
 
@@ -110,7 +114,7 @@ function SendModalContent({ onClose }: { onClose: () => void }) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{p.name}</p>
-                <p className="text-xs text-[var(--text-secondary)]">{p.ip}:{p.port}</p>
+                <p className="text-xs text-[var(--text-secondary)]">{p.ip}:{p.port}{p.trusted ? " · apparie" : ""}</p>
               </div>
               {active && <span className="text-xs font-bold text-[var(--accent)]">Selectionne</span>}
             </button>

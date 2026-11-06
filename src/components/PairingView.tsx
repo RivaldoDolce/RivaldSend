@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Copy, RefreshCw, Check } from 'lucide-react';
 import { useToast } from './toast/Toast';
 import { usePeersStore } from '../stores/usePeersStore';
-import { getDeviceInfo, generatePairingQr } from '../lib/tauri-bridge';
+import { getDeviceInfo, generatePairingQr, genererCodeAppairage, setPairingCodeBackend } from '../lib/tauri-bridge';
 
 interface DeviceInfo {
   name: string;
@@ -12,34 +12,52 @@ interface DeviceInfo {
   fingerprintShort: string;
 }
 
-function generatePin(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I
-  let pin = '';
-  for (let i = 0; i < 6; i++) {
-    pin += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `${pin.slice(0, 3)}-${pin.slice(3)}`;
+// Format d'affichage : AB39XZ -> AB3-9XZ.
+function formaterCode(code: string): string {
+  const n = code.replace(/-/g, '').toUpperCase();
+  return n.length === 6 ? `${n.slice(0, 3)}-${n.slice(3)}` : n;
 }
 
 export function PairingView() {
   const toast = useToast();
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
-  const [pin, setPin] = useState(generatePin);
+  // Code brut (sans tiret), genere cote Rust depuis un CSPRNG. Le tiret
+  // n'est qu'une convention d'affichage, ajoutee par `formaterCode`.
+  const [pin, setPin] = useState('');
   const [qrSvg, setQrSvg] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(300); // 5 minutes
+  const [enregistrementOk, setEnregistrementOk] = useState(false);
 
   const peers = usePeersStore((s) => s.peers);
 
-  // Charger les infos de l'appareil
+  // Nouveau code : genere cote Rust, puis enregistre cote serveur pour que
+  // `/v1/pair` et `/v1/transfers` puissent le valider. Sans cet
+  // enregistrement, le serveur ne connaissait pas le code affiche.
+  const nouveauCode = useCallback(async () => {
+    try {
+      const brut = await genererCodeAppairage();
+      await setPairingCodeBackend(brut);
+      setPin(brut);
+      setSecondsLeft(300);
+      setEnregistrementOk(true);
+    } catch (err) {
+      console.error('[pairing] generation du code:', err);
+      setEnregistrementOk(false);
+      toast.error('Code indisponible', 'Impossible de generer le code d\u2019appairage.');
+    }
+  }, [toast]);
+
+  // Charger les infos de l'appareil + premier code au montage.
   useEffect(() => {
     getDeviceInfo().then(setDeviceInfo).catch(console.error);
-  }, []);
+    void nouveauCode();
+  }, [nouveauCode]);
 
   // Générer le QR à chaque changement de PIN ou device
   useEffect(() => {
-    if (!deviceInfo) return;
-    const code = pin.replace('-', '');
+    if (!deviceInfo || !pin) return;
+    const code = pin.replace(/-/g, '');
     const fingerprintShort = deviceInfo.fingerprintShort ?? '';
     generatePairingQr({ ip: deviceInfo.ip, port: deviceInfo.port, code, fingerprintShort })
       .then(setQrSvg)
@@ -58,19 +76,18 @@ export function PairingView() {
   // Countdown
   useEffect(() => {
     if (secondsLeft <= 0) {
-      // Régénérer PIN et QR
-      setPin(generatePin());
-      setSecondsLeft(300);
+      // Code expire : on en genere un nouveau (et on le re-enregistre).
+      void nouveauCode();
       toast.success('Nouveau code généré', 'Le précédent a expiré');
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [secondsLeft, toast]);
+  }, [secondsLeft, toast, nouveauCode]);
 
   const handleCopyLink = useCallback(async () => {
-    if (!deviceInfo) return;
-    const link = `rivaldsend://${deviceInfo.ip}:${deviceInfo.port}?code=${pin.replace('-', '')}&fp=${deviceInfo.fingerprintShort ?? ''}`;
+    if (!deviceInfo || !pin) return;
+    const link = `rivaldsend://${deviceInfo.ip}:${deviceInfo.port}?code=${pin.replace(/-/g, '')}&fp=${deviceInfo.fingerprintShort ?? ''}`;
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
@@ -82,10 +99,9 @@ export function PairingView() {
   }, [deviceInfo, pin, toast]);
 
   const handleRefresh = useCallback(() => {
-    setPin(generatePin());
-    setSecondsLeft(300);
+    void nouveauCode();
     toast.success('Code régénéré', 'Un nouveau code est disponible');
-  }, [toast]);
+  }, [toast, nouveauCode]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -95,6 +111,7 @@ export function PairingView() {
 
   // Rendu via data-URI plutôt que dangerouslySetInnerHTML (pas d'exécution de SVG)
   const qrSrc = qrSvg ? `data:image/svg+xml;utf8,${encodeURIComponent(qrSvg)}` : '';
+  const pinAffiche = pin ? formaterCode(pin) : '······';
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -118,8 +135,13 @@ export function PairingView() {
             )}
           </div>
           <p className="mono text-2xl font-bold mt-4 tracking-widest text-[var(--text-primary)]">
-            {pin}
+            {pinAffiche}
           </p>
+          {!enregistrementOk && pin && (
+            <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+              Code non enregistre par le serveur : les demandes entrantes seront refusees.
+            </p>
+          )}
           <p className="text-xs text-[var(--text-tertiary)] mt-2">
             Expire dans <span className="font-semibold mono">{formatTime(secondsLeft)}</span>
           </p>
@@ -158,7 +180,7 @@ export function PairingView() {
             </li>
             <li className="flex gap-3">
               <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-white text-xs font-bold">4</span>
-              <span>Confirmez le code <strong className="mono">{pin}</strong> sur les deux appareils</span>
+              <span>Confirmez le code <strong className="mono">{pinAffiche}</strong> sur les deux appareils</span>
             </li>
           </ol>
 

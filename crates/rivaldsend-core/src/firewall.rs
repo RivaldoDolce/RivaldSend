@@ -1,19 +1,32 @@
 use crate::error::CoreError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NetworkProfile { Private, Public, Domain, Unknown }
+pub enum NetworkProfile {
+    Private,
+    Public,
+    Domain,
+    Unknown,
+}
 
 #[cfg(windows)]
 pub fn detect_windows_firewall() -> Result<NetworkProfile, CoreError> {
     let sortie = std::process::Command::new("powershell")
-        .args(["-Command", "Get-NetConnectionProfile | Select-Object -ExpandProperty NetworkCategory"])
+        .args([
+            "-Command",
+            "Get-NetConnectionProfile | Select-Object -ExpandProperty NetworkCategory",
+        ])
         .output()
         .map_err(|e| CoreError::IoString(e.to_string()))?;
     let texte = String::from_utf8_lossy(&sortie.stdout).to_lowercase();
-    if texte.contains("public") { Ok(NetworkProfile::Public) }
-    else if texte.contains("private") { Ok(NetworkProfile::Private) }
-    else if texte.contains("domain") { Ok(NetworkProfile::Domain) }
-    else { Ok(NetworkProfile::Unknown) }
+    if texte.contains("public") {
+        Ok(NetworkProfile::Public)
+    } else if texte.contains("private") {
+        Ok(NetworkProfile::Private)
+    } else if texte.contains("domain") {
+        Ok(NetworkProfile::Domain)
+    } else {
+        Ok(NetworkProfile::Unknown)
+    }
 }
 
 #[cfg(not(windows))]
@@ -30,10 +43,15 @@ pub fn detect_network_profile() -> Result<NetworkProfile, CoreError> {
         .output()
         .map_err(|e| CoreError::IoString(e.to_string()))?;
     let texte = String::from_utf8_lossy(&sortie.stdout).to_lowercase();
-    if texte.contains("public") { Ok(NetworkProfile::Public) }
-    else if texte.contains("private") { Ok(NetworkProfile::Private) }
-    else if texte.contains("domain") { Ok(NetworkProfile::Domain) }
-    else { Ok(NetworkProfile::Unknown) }
+    if texte.contains("public") {
+        Ok(NetworkProfile::Public)
+    } else if texte.contains("private") {
+        Ok(NetworkProfile::Private)
+    } else if texte.contains("domain") {
+        Ok(NetworkProfile::Domain)
+    } else {
+        Ok(NetworkProfile::Unknown)
+    }
 }
 
 /// Détection du profil réseau sur Linux via NetworkManager.
@@ -55,10 +73,14 @@ pub fn detect_network_profile() -> Result<NetworkProfile, CoreError> {
         for entree in peripheriques.flatten() {
             let nom = entree.file_name();
             let nom_texte = nom.to_string_lossy();
-            if nom_texte.starts_with("eth") || nom_texte.starts_with("wlan") || nom_texte.starts_with("wlp") || nom_texte.starts_with("enp") {
-                if let Ok(etat) = std::fs::read_to_string(
-                    format!("/sys/class/net/{nom_texte}/operstate")
-                ) {
+            if nom_texte.starts_with("eth")
+                || nom_texte.starts_with("wlan")
+                || nom_texte.starts_with("wlp")
+                || nom_texte.starts_with("enp")
+            {
+                if let Ok(etat) =
+                    std::fs::read_to_string(format!("/sys/class/net/{nom_texte}/operstate"))
+                {
                     if etat.trim() == "up" {
                         return Ok(NetworkProfile::Private);
                     }

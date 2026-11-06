@@ -30,7 +30,10 @@ pub struct ProgressEmitter {
 }
 impl ProgressEmitter {
     pub fn new() -> Self {
-        Self { last: Mutex::new(None), interval: Duration::from_millis(250) }
+        Self {
+            last: Mutex::new(None),
+            interval: Duration::from_millis(250),
+        }
     }
     pub async fn should_emit(&self) -> bool {
         let mut g = self.last.lock().await;
@@ -45,5 +48,7 @@ impl ProgressEmitter {
     }
 }
 impl Default for ProgressEmitter {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

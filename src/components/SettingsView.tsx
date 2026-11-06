@@ -1,9 +1,82 @@
+import { useState, useCallback } from "react";
+import { Trash2 } from "lucide-react";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useServerStore } from "../stores/useServerStore";
+import { usePeersStore } from "../stores/usePeersStore";
 import { useTranslation } from "react-i18next";
 import { pickFolder, setDownloadDirBackend } from "../lib/tauri-bridge";
 import { useDeviceContext } from "../hooks/useDeviceContext";
 import { useToast } from "./toast/Toast";
+
+function TrustedPeersSection() {
+  const toast = useToast();
+  const peers = usePeersStore((s) => s.peers);
+  const removePeer = usePeersStore((s) => s.removePeer);
+  const [oubliEnCours, setOubliEnCours] = useState<string | null>(null);
+  const apparies = peers.filter((p) => p.trusted);
+
+  const oublier = useCallback(async (peerId: string, nom: string) => {
+    setOubliEnCours(peerId);
+    try {
+      const { forgetPeer } = await import("../lib/tauri-bridge");
+      await forgetPeer(peerId);
+      removePeer(peerId);
+      toast.success("Appareil oublié", `${nom} ne pourra plus envoyer sans nouvel appairage.`);
+    } catch {
+      toast.error("Oubli impossible", "Reessayez dans un instant.");
+    } finally {
+      setOubliEnCours(null);
+    }
+  }, [removePeer, toast]);
+
+  const toutOublier = useCallback(async () => {
+    try {
+      const { forgetAllPeers } = await import("../lib/tauri-bridge");
+      const n = await forgetAllPeers();
+      for (const p of apparies) removePeer(p.id);
+      toast.success("Confiance revoquee", `${n} appareil(s) oublie(s).`);
+    } catch {
+      toast.error("Oubli impossible", "Reessayez dans un instant.");
+    }
+  }, [apparies, removePeer, toast]);
+
+  return (
+    <div className="pt-2 border-t border-[var(--border)]">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">Appareils apparies ({apparies.length})</p>
+        {apparies.length > 0 && (
+          <button onClick={toutOublier} className="text-xs text-[var(--text-tertiary)] hover:text-red-600">
+            Tout oublier
+          </button>
+        )}
+      </div>
+      {apparies.length === 0 ? (
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+          Aucun. Appariez un appareil depuis l'onglet Decouverte : vous pourrez ensuite envoyer sans ressaisir de code.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {apparies.map((p) => (
+            <li key={p.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium">{p.name}</span>
+              <span className="mono shrink-0 text-xs text-[var(--text-tertiary)]">{p.ip}</span>
+              <button
+                onClick={() => oublier(p.id, p.name)}
+                disabled={oubliEnCours === p.id}
+                title={`Oublier ${p.name}`}
+                aria-label={`Oublier ${p.name}`}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function SettingsView() {
   const { t, i18n } = useTranslation();
@@ -88,6 +161,7 @@ export function SettingsView() {
           )}
           <p className="mt-1 text-xs text-[var(--text-tertiary)]">{t("tlsHint")}</p>
         </div>
+        <TrustedPeersSection />
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { Search, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar, QrCode } from "lucide-react";
+import { Search, MonitorSmartphone, Smartphone, Globe, RefreshCw, Radar, QrCode, Trash2, LogOut } from "lucide-react";
 import { useDeviceContext } from "../hooks/useDeviceContext";
 import { usePeersStore } from "../stores/usePeersStore";
 import { VerifySheet } from "./VerifySheet";
@@ -84,15 +84,40 @@ function ManualConnectRow() {
     if (!ip.trim()) return;
     setBusy(true);
     try {
-      const { connectByIp } = await import("../lib/tauri-bridge");
-      const peer = await connectByIp(ip.trim(), Number(port) || 53317);
-      usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: peer.platform as never, latencyMs: undefined, trusted: peer.trusted });
-      const pin = code.trim().replace("-", "").toUpperCase();
-      if (pin) usePeersStore.getState().setPairingCode(peer.id, pin);
-      toast.success("Appareil ajouté", peer.name);
+      const { connectByIp, pairWithPeer, estAdresseIp } = await import("../lib/tauri-bridge");
+      const adresse = ip.trim();
+      if (!estAdresseIp(adresse)) {
+        toast.error("Adresse invalide", "Saisissez une adresse IP (ex : 192.168.1.10).");
+        return;
+      }
+      const portNombre = Number(port) || 53317;
+      const pin = code.trim().replace(/-/g, "").toUpperCase();
+      if (pin) {
+        // Code saisi : appairage bilateral immediat.
+        const apparie = await pairWithPeer({ ip: adresse, port: portNombre, code: pin });
+        usePeersStore.getState().addPeer({
+          id: apparie.peerId,
+          name: apparie.name,
+          ip: apparie.ip,
+          port: apparie.port,
+          fingerprint: apparie.fingerprintShort,
+          fingerprintShort: apparie.fingerprintShort,
+          status: "paired",
+          platform: (apparie.platform as Peer["platform"]) ?? "unknown",
+          latencyMs: undefined,
+          trusted: true,
+        });
+        toast.success("Appareil appairé", apparie.name);
+      } else {
+        // Sans code : simple decouverte, l'appairage se fera via « Connecter ».
+        const peer = await connectByIp(adresse, portNombre);
+        usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: (peer.platform as Peer["platform"]) ?? "unknown", latencyMs: undefined, trusted: peer.trusted });
+        toast.success("Appareil ajouté", peer.name);
+      }
     } catch (err) {
       console.error("[discovery] connect_by_ip:", err);
-      toast.error("Appareil injoignable", "Vérifiez IP, port et pare-feu.");
+      const message = err instanceof Error ? err.message : "Vérifiez IP, port et pare-feu.";
+      toast.error("Connexion impossible", message);
     } finally { setBusy(false); }
   }, [ip, port, code, toast]);
 
@@ -196,16 +221,29 @@ export function DiscoveryView() {
     if (scanning) return;
     setScanning(true);
     try {
-      const { scanQrCode, connectByIp } = await import("../lib/tauri-bridge");
+      const { scanQrCode, pairWithPeer } = await import("../lib/tauri-bridge");
       const lien = await scanQrCode();
       if (!lien) return; // Annulé par l'utilisateur.
-      const peer = await connectByIp(lien.ip, lien.port);
-      usePeersStore.getState().addPeer({ id: peer.id, name: peer.name, ip: peer.ip, port: peer.port, fingerprint: peer.fingerprintShort, fingerprintShort: peer.fingerprintShort, status: peer.trusted ? "paired" : "discovered", platform: peer.platform as never, latencyMs: undefined, trusted: peer.trusted });
-      usePeersStore.getState().setPairingCode(peer.id, lien.code);
-      toastRef.current.success("QR scanné", `Appareil ajouté : ${peer.name}`);
+      // Appairage bilateral : les deux appareils se memorisent. Sans cela,
+      // seul le mobile connaissait le PC, jamais l'inverse.
+      const apparie = await pairWithPeer({ ip: lien.ip, port: lien.port, code: lien.code });
+      usePeersStore.getState().addPeer({
+        id: apparie.peerId,
+        name: apparie.name,
+        ip: apparie.ip,
+        port: apparie.port,
+        fingerprint: apparie.fingerprintShort,
+        fingerprintShort: apparie.fingerprintShort,
+        status: "paired",
+        platform: (apparie.platform as Peer["platform"]) ?? "unknown",
+        latencyMs: undefined,
+        trusted: true,
+      });
+      toastRef.current.success("Appareil appairé", `${apparie.name} vous connait aussi désormais.`);
     } catch (err) {
       console.error("[discovery] scan QR:", err);
-      toastRef.current.error("Scan impossible", "Vérifiez la permission caméra puis réessayez.");
+      const message = err instanceof Error ? err.message : "Vérifiez la permission caméra puis réessayez.";
+      toastRef.current.error("Appairage impossible", message);
     } finally {
       setScanning(false);
     }
@@ -280,43 +318,88 @@ export function DiscoveryView() {
 
 function DiscoveryCard({ peer }: { peer: Peer }) {
   const openSendModal = usePeersStore((s) => s.openSendModal);
+  const removePeer = usePeersStore((s) => s.removePeer);
+  const toast = useToast();
   const [connState, setConnState] = useState<"discovered" | "connecting" | "verifying" | "paired" | "failed">(
     peer.trusted ? "paired" : "discovered"
   );
   const [showVerify, setShowVerify] = useState(false);
+  const [oubliEnCours, setOubliEnCours] = useState(false);
   const latency = usePeerLatency(peer.ip, peer.port);
 
   const handleConnect = useCallback(async () => {
     setConnState("connecting");
     try {
       const { connectByIp } = await import("../lib/tauri-bridge");
-      await connectByIp(peer.ip, peer.port);
-      setConnState("verifying");
-      setShowVerify(true);
+      const decouvert = await connectByIp(peer.ip, peer.port);
+      if (decouvert.trusted) {
+        // Pair deja apparie (reconnu par son device_id) : rien a saisir.
+        usePeersStore.getState().updatePeer(peer.id, { trusted: true, status: "paired" });
+        setConnState("paired");
+      } else {
+        setConnState("verifying");
+        setShowVerify(true);
+      }
     } catch {
       setConnState("failed");
       setTimeout(() => setConnState("discovered"), 2500);
     }
-  }, [peer.ip, peer.port]);
+  }, [peer.ip, peer.port, peer.id]);
 
+  // Appairage bilateral : le code saisi est verifie par le pair distant, qui
+  // nous memorise en retour. Les deux appareils peuvent ensuite envoyer sans
+  // ressaisir de code.
   const handleApprove = useCallback(async (code: string) => {
     try {
-      const { approvePeer } = await import("../lib/tauri-bridge");
-      await approvePeer(peer.id, code);
-      usePeersStore.getState().updatePeer(peer.id, { trusted: true, status: "paired" });
+      const { pairWithPeer } = await import("../lib/tauri-bridge");
+      const apparie = await pairWithPeer({ ip: peer.ip, port: peer.port, code });
+      usePeersStore.getState().updatePeer(peer.id, {
+        trusted: true,
+        status: "paired",
+        name: apparie.name || peer.name,
+        fingerprintShort: apparie.fingerprintShort || peer.fingerprintShort,
+      });
       usePeersStore.getState().setPairingCode(peer.id, code);
       setShowVerify(false);
       setConnState("paired");
-    } catch {
+      toast.success("Appareil appairé", `${apparie.name} vous connait aussi désormais.`);
+    } catch (err) {
+      console.error("[discovery] appairage:", err);
+      const message = err instanceof Error ? err.message : "Code refuse ou pair injoignable.";
+      toast.error("Appairage impossible", message);
       setShowVerify(false);
       setConnState("failed");
     }
-  }, [peer.id]);
+  }, [peer.id, peer.ip, peer.port, peer.name, peer.fingerprintShort, toast]);
 
   const handleReject = useCallback(() => {
     setShowVerify(false);
     setConnState("discovered");
   }, []);
+
+  // Oublier : retire la confiance des deux cotes locaux (magasin + cache).
+  // Le pair distant n'est pas prevenu : il devra nous oublier a son tour.
+  const handleForget = useCallback(async () => {
+    setOubliEnCours(true);
+    try {
+      const { forgetPeer } = await import("../lib/tauri-bridge");
+      await forgetPeer(peer.id);
+      removePeer(peer.id);
+      setConnState("discovered");
+      toast.success("Appareil oublié", `${peer.name} ne pourra plus envoyer sans nouvel appairage.`);
+    } catch (err) {
+      console.error("[discovery] oubli:", err);
+      toast.error("Oubli impossible", "Reessayez dans un instant.");
+    } finally {
+      setOubliEnCours(false);
+    }
+  }, [peer.id, peer.name, removePeer, toast]);
+
+  // Deconnecter : retire l'appareil de la liste affichee sans toucher a la
+  // confiance. Il reapparaitra a sa prochaine annonce mDNS.
+  const handleDisconnect = useCallback(() => {
+    removePeer(peer.id);
+  }, [peer.id, removePeer]);
 
   const handleSend = useCallback(() => {
     openSendModal([]);
@@ -339,12 +422,31 @@ function DiscoveryCard({ peer }: { peer: Peer }) {
       </div>
       <LatencyBadge ms={latency ?? peer.latencyMs} />
       {connState === "paired" ? (
-        <button
-          onClick={handleSend}
-          className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--accent-hover)]"
-        >
-          Envoyer
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            onClick={handleSend}
+            className="rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--accent-hover)]"
+          >
+            Envoyer
+          </button>
+          <button
+            onClick={handleDisconnect}
+            title="Retirer de la liste (reapparaitra a la prochaine annonce)"
+            aria-label={`Deconnecter ${peer.name}`}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={handleForget}
+            disabled={oubliEnCours}
+            title="Oublier definitivement (supprime la confiance)"
+            aria-label={`Oublier ${peer.name}`}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       ) : (
         <button
           onClick={handleConnect}

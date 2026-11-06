@@ -50,10 +50,7 @@ pub fn assurer_config_tls_dans(
     let chemin_cert = dossier.join("cert.der");
     let chemin_cle = dossier.join("cle.der");
 
-    if let (Ok(cert_der), Ok(cle_der)) = (
-        std::fs::read(&chemin_cert),
-        std::fs::read(&chemin_cle),
-    ) {
+    if let (Ok(cert_der), Ok(cle_der)) = (std::fs::read(&chemin_cert), std::fs::read(&chemin_cle)) {
         if let Ok(config) = construire_config(&cert_der, &cle_der) {
             let empreinte = empreinte_sha256(&cert_der);
             return Ok((config, empreinte));
@@ -80,6 +77,17 @@ pub fn assurer_config_tls_dans(
     Ok((config, empreinte))
 }
 
+fn construire_config(cert_der: &[u8], cle_der: &[u8]) -> Result<rustls::ServerConfig, String> {
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+
+    let chaine = vec![CertificateDer::from(cert_der.to_vec())];
+    let cle = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cle_der.to_vec()));
+    rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(chaine, cle)
+        .map_err(|e| format!("configuration TLS invalide : {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,18 +111,4 @@ mod tests {
         assert!(construire_config(&[], &[]).is_err());
         let _ = config;
     }
-}
-
-fn construire_config(
-    cert_der: &[u8],
-    cle_der: &[u8],
-) -> Result<rustls::ServerConfig, String> {
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-
-    let chaine = vec![CertificateDer::from(cert_der.to_vec())];
-    let cle = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cle_der.to_vec()));
-    rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(chaine, cle)
-        .map_err(|e| format!("configuration TLS invalide : {e}"))
 }

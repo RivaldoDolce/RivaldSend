@@ -85,6 +85,11 @@
   .glass { backdrop-filter: none; background: var(--surface); }
   header { backdrop-filter: none !important; background: var(--surface) !important; }
 }
+/* Tactile : pas de survol collant qui masque l'action. */
+@media (pointer: coarse) {
+  .rivaldsend-dropzone:hover { transform: none; }
+  .card-premium:hover { box-shadow: var(--shadow-sm); }
+}
 @media (max-width: 820px) {
   .app-aurora::before { display: none; }
 }

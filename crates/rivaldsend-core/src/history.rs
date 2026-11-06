@@ -11,19 +11,28 @@ pub struct HistoryEntry {
     pub status: String,
     pub timestamp: DateTime<Utc>,
 }
-pub async fn append(path: &std::path::Path, entry: &HistoryEntry) -> Result<(), crate::error::CoreError> {
+pub async fn append(
+    path: &std::path::Path,
+    entry: &HistoryEntry,
+) -> Result<(), crate::error::CoreError> {
     let mut line = serde_json::to_vec(entry)?;
     line.push(b'\n');
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
-    let mut file = tokio::fs::OpenOptions::new().create(true).append(true).open(path).await?;
+    let mut file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .await?;
     use tokio::io::AsyncWriteExt;
     file.write_all(&line).await?;
     file.sync_data().await?;
     Ok(())
 }
-pub async fn load_all(path: &std::path::Path) -> Result<Vec<HistoryEntry>, crate::error::CoreError> {
+pub async fn load_all(
+    path: &std::path::Path,
+) -> Result<Vec<HistoryEntry>, crate::error::CoreError> {
     let data = match tokio::fs::read_to_string(path).await {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

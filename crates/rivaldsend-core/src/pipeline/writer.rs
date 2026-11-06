@@ -1,9 +1,14 @@
+use crate::error::CoreError;
 use std::path::Path;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
-use crate::error::CoreError;
 
 pub async fn write_chunk(path: &Path, offset: u64, data: &[u8]) -> Result<(), CoreError> {
-    let mut file = tokio::fs::OpenOptions::new().create(true).write(true).truncate(false).open(path).await?;
+    let mut file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(path)
+        .await?;
     file.seek(std::io::SeekFrom::Start(offset)).await?;
     file.write_all(data).await?;
     file.sync_data().await?;
@@ -16,7 +21,8 @@ pub async fn preallocate(path: &Path, size: u64) -> Result<(), CoreError> {
         let available = {
             #[cfg(unix)]
             {
-                let stat = nix::sys::statvfs::statvfs(parent).map_err(|e| CoreError::IoString(e.to_string()))?;
+                let stat = nix::sys::statvfs::statvfs(parent)
+                    .map_err(|e| CoreError::IoString(e.to_string()))?;
                 stat.blocks_available() as u64 * stat.fragment_size() as u64
             }
             #[cfg(not(unix))]
@@ -25,17 +31,26 @@ pub async fn preallocate(path: &Path, size: u64) -> Result<(), CoreError> {
             }
         };
         if size > available {
-            return Err(CoreError::IoString(format!("espace disque insuffisant: requis {size}, disponible {available}")));
+            return Err(CoreError::IoString(format!(
+                "espace disque insuffisant: requis {size}, disponible {available}"
+            )));
         }
     }
-    let file = tokio::fs::OpenOptions::new().create(true).write(true).truncate(false).open(path).await?;
+    let file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(path)
+        .await?;
     file.set_len(size).await?;
     file.sync_all().await?;
     Ok(())
 }
 
 pub async fn atomic_write(path: &Path, data: &[u8]) -> Result<(), std::io::Error> {
-    let parent = path.parent().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "chemin sans parent"))?;
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "chemin sans parent")
+    })?;
     tokio::fs::create_dir_all(parent).await?;
     let tmp = parent.join(format!(".rivaldsend-tmp-{}", uuid::Uuid::new_v4()));
     {

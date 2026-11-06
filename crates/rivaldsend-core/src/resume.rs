@@ -1,7 +1,7 @@
+use crate::pipeline::writer::atomic_write;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::pipeline::writer::atomic_write;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResumeState {
     pub transfer_id: Uuid,
@@ -10,7 +10,11 @@ pub struct ResumeState {
 }
 impl ResumeState {
     pub fn new(transfer_id: Uuid) -> Self {
-        Self { transfer_id, validated_offsets: Vec::new(), last_updated: Utc::now() }
+        Self {
+            transfer_id,
+            validated_offsets: Vec::new(),
+            last_updated: Utc::now(),
+        }
     }
     pub fn add_ack(&mut self, ack: rivaldsend_proto::ChunkAck) {
         self.validated_offsets.push(ack);
@@ -24,7 +28,10 @@ pub async fn load(path: &std::path::Path) -> Result<Option<ResumeState>, crate::
         Err(e) => Err(e.into()),
     }
 }
-pub async fn save(path: &std::path::Path, state: &ResumeState) -> Result<(), crate::error::CoreError> {
+pub async fn save(
+    path: &std::path::Path,
+    state: &ResumeState,
+) -> Result<(), crate::error::CoreError> {
     let data = serde_json::to_vec(state)?;
     atomic_write(path, &data).await?;
     Ok(())

@@ -6,6 +6,11 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/symbol-on-light.webp" />
     <link rel="apple-touch-icon" href="/assets/symbol-on-light.webp" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <style>
+      html, body { margin: 0; padding: 0; min-height: 100%; }
+      /* Premier rendu avant React : respecte l'encoche/la barre de navigation. */
+      body { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+    </style>
     <link rel="preload" href="/assets/onboarding-bg.webp" as="image" type="image/webp" />
     <title>RivaldSend</title>
   </head>

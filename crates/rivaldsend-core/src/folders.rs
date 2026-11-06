@@ -1,17 +1,22 @@
-use std::path::{Path, PathBuf};
-use unicode_normalization::UnicodeNormalization;
 use crate::error::CoreError;
 use rivaldsend_proto::{FileMode, ManifestEntry};
+use std::path::{Path, PathBuf};
+use unicode_normalization::UnicodeNormalization;
 
 pub fn normalize_nfc(s: &str) -> String {
     s.nfc().collect()
 }
 
 pub fn is_symlink(path: &Path) -> bool {
-    std::fs::symlink_metadata(path).map(|m| m.file_type().is_symlink()).unwrap_or(false)
+    std::fs::symlink_metadata(path)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
 }
 
-pub fn collect_manifest_entries(root: &Path, follow_symlinks: bool) -> Result<Vec<ManifestEntry>, CoreError> {
+pub fn collect_manifest_entries(
+    root: &Path,
+    follow_symlinks: bool,
+) -> Result<Vec<ManifestEntry>, CoreError> {
     let mut entries = Vec::new();
     let mut case_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     collect_recursive(root, root, &mut entries, &mut case_map, follow_symlinks, 0)?;
@@ -27,7 +32,9 @@ fn collect_recursive(
     depth: usize,
 ) -> Result<(), CoreError> {
     if depth > rivaldsend_proto::limits::MAX_RELATIVE_PATH_DEPTH {
-        return Err(CoreError::Validation("profondeur de dossier dépassée".into()));
+        return Err(CoreError::Validation(
+            "profondeur de dossier dépassée".into(),
+        ));
     }
     for entry in std::fs::read_dir(current)? {
         let entry = entry?;
@@ -35,7 +42,11 @@ fn collect_recursive(
         if !follow && is_symlink(&path) {
             continue;
         }
-        let rel = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
+        let rel = path
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         let rel_nfc = normalize_nfc(&rel);
         if rel_nfc != rel {
             // normalisation NFC implicite
@@ -50,7 +61,12 @@ fn collect_recursive(
         case_map.insert(lower, rel_nfc.clone());
         let meta = std::fs::metadata(&path)?;
         if meta.is_dir() {
-            entries.push(ManifestEntry { relative_path: rel_nfc.clone(), size: 0, blake3: "0".repeat(64), mode: FileMode::Directory });
+            entries.push(ManifestEntry {
+                relative_path: rel_nfc.clone(),
+                size: 0,
+                blake3: "0".repeat(64),
+                mode: FileMode::Directory,
+            });
             collect_recursive(root, &path, entries, case_map, follow, depth + 1)?;
         } else if meta.is_file() {
             let size = meta.len();
@@ -60,7 +76,12 @@ fn collect_recursive(
                 let bytes = std::fs::read(&path).unwrap_or_default();
                 blake3::hash(&bytes).to_hex().to_string()
             };
-            entries.push(ManifestEntry { relative_path: rel_nfc, size, blake3: hash, mode: FileMode::File });
+            entries.push(ManifestEntry {
+                relative_path: rel_nfc,
+                size,
+                blake3: hash,
+                mode: FileMode::File,
+            });
         }
     }
     Ok(())

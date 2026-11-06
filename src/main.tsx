@@ -15,6 +15,11 @@ import "./index.css";
 if (navigator.hardwareConcurrency <= 4 || matchMedia("(prefers-reduced-motion: reduce)").matches) {
   document.documentElement.classList.add("perf-lite");
 }
+if (document.body) {
+  const corps = document.body.style as unknown as Record<string, string>;
+  corps.webkitTapHighlightColor = "transparent";
+  corps.webkitTouchCallout = "none";
+}
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
