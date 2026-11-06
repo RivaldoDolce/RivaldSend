@@ -85,9 +85,40 @@ impl TransferManager {
             path,
             priority: 0,
         });
+        drop(q);
         let mut s = self.statuses.lock().await;
         s.insert(id, TransferStatus::Queued);
+        drop(s);
+        // Essayer de demarrer immediatement si un slot de concurrence est libre.
+        let _ = self.start_transfer(id).await;
         id
+    }
+
+    /// Demarre le prochain transfert en attente dans la queue, si un slot est
+    /// libre. Appele par [`marquer_termine`](Self::marquer_termine) et
+    /// [`cancel`](Self::cancel) quand un transfert se termine.
+    pub async fn process_queue(&self) {
+        let next = {
+            let mut q = self.queue.lock().await;
+            q.pop()
+        };
+        let Some(queued) = next else {
+            return;
+        };
+        let id = queued.id;
+        // Remettre le statut en Queued (il etait peut-etre en Running si
+        // preemptif) puis essayer de demarrer.
+        {
+            let mut s = self.statuses.lock().await;
+            s.insert(id, TransferStatus::Queued);
+        }
+        let _ = self.start_transfer(id).await;
+        if self.status(&id).await != Some(TransferStatus::Running) {
+            // Echec (semaphore plein ou autre) : remettre en queue pour
+            // une tentative ultérieure.
+            let mut q = self.queue.lock().await;
+            q.push(queued);
+        }
     }
     pub async fn start_transfer(&self, id: Uuid) -> Result<(), CoreError> {
         // Le permis est stocke et rendu quand le transfert se termine : sans
@@ -174,6 +205,8 @@ impl TransferManager {
         }
         // Libere le slot de concurrence.
         self.permis.lock().await.remove(&id);
+        // Relancer le prochain transfert en attente, si aucun.
+        self.process_queue().await;
     }
     pub async fn resume(&self, id: Uuid) -> Result<Option<crate::resume::ResumeState>, CoreError> {
         let path = self.resume_dir.join(format!("{id}.json"));
@@ -205,6 +238,8 @@ impl TransferManager {
         self.permis.lock().await.remove(&id);
         self.codes.lock().await.remove(&id);
         self.targets.lock().await.remove(&id);
+        // Relancer le prochain transfert en attente, si aucun.
+        self.process_queue().await;
         let path = self.resume_dir.join(format!("{id}.json"));
         let _ = tokio::fs::remove_file(&path).await;
         let partial_dir = Self::default_partial_dir(id);

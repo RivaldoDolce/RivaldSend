@@ -19,7 +19,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+use tokio::io::AsyncReadExt;
 
+use crate::commands::client_tls;
+use crate::http::derive_psk_transfert;
+use rivaldsend_core::folders;
 use rivaldsend_core::pairing;
 
 /// Taille d'un morceau envoyé (bien sous la limite serveur de 16 Mio).
@@ -29,28 +33,44 @@ const TAILLE_MORCEAU: usize = 4 * 1024 * 1024;
 /// 4 Mio sur un Wi-Fi lent, assez court pour ne pas rester bloque.
 const DELAI_REQUETE: Duration = Duration::from_secs(60);
 
-/// Construit le manifeste d'un fichier local.
+/// Construit le manifeste d'un fichier ou d'un dossier local.
+/// Si `chemin` est un dossier, toutes les entrées sont collectées récursivement
+/// et le manifeste contient une entrée par fichier.
 pub async fn construire_manifeste(
     id: uuid::Uuid,
     chemin: &Path,
 ) -> Result<rivaldsend_proto::TransferManifest, String> {
-    let nom = chemin
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| "nom de fichier illisible".to_string())?
-        .to_string();
-    if !rivaldsend_proto::validation::is_safe_relative_path(&nom) {
-        return Err(format!("nom de fichier refusé : {nom}"));
-    }
     let metailles = tokio::fs::metadata(chemin)
         .await
         .map_err(|e| format!("fichier illisible : {e}"))?;
-    if !metailles.is_file() {
-        return Err("seuls les fichiers simples sont pris en charge".to_string());
-    }
-    let empreinte = rivaldsend_core::pipeline::hasher::hash_file(chemin)
-        .await
-        .map_err(|e| format!("hachage impossible : {e}"))?;
+
+    let files = if metailles.is_dir() {
+        folders::collect_manifest_entries(chemin, false)
+            .map_err(|e| format!("collecte du dossier impossible : {e}"))?
+    } else if metailles.is_file() {
+        let nom = chemin
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| "nom de fichier illisible".to_string())?
+            .to_string();
+        if !rivaldsend_proto::validation::is_safe_relative_path(&nom) {
+            return Err(format!("nom de fichier refusé : {nom}"));
+        }
+        let empreinte = rivaldsend_core::pipeline::hasher::hash_file(chemin)
+            .await
+            .map_err(|e| format!("hachage impossible : {e}"))?;
+        vec![rivaldsend_proto::manifest::ManifestEntry {
+            relative_path: nom,
+            size: metailles.len(),
+            blake3: empreinte,
+            mode: rivaldsend_proto::manifest::FileMode::File,
+        }]
+    } else {
+        return Err("type de fichier non pris en charge".to_string());
+    };
+
+    let total_bytes: u64 = files.iter().map(|f| f.size).sum();
+
     Ok(rivaldsend_proto::TransferManifest {
         transfer_id: id,
         protocol_version: rivaldsend_proto::messages::SemVer {
@@ -58,15 +78,32 @@ pub async fn construire_manifeste(
             minor: 0,
             patch: 0,
         },
-        files: vec![rivaldsend_proto::manifest::ManifestEntry {
-            relative_path: nom,
-            size: metailles.len(),
-            blake3: empreinte,
-            mode: rivaldsend_proto::manifest::FileMode::File,
-        }],
-        total_bytes: metailles.len(),
+        files,
+        total_bytes,
         created_at: chrono::Utc::now(),
     })
+}
+
+/// Collecte récursivement tous les fichiers sous un dossier.
+fn collecter_fichiers_dossier(racine: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let _ = collecter_recursif(racine, &mut out);
+    out
+}
+
+fn collecter_recursif(current: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    if current.is_dir() {
+        for entree in std::fs::read_dir(current)? {
+            let entree = entree?;
+            let path = entree.path();
+            if path.is_dir() {
+                let _ = collecter_recursif(&path, out);
+            } else if path.is_file() {
+                out.push(path);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn emettre_progression(
@@ -137,111 +174,93 @@ pub fn spawn_envoi(params: ParametresEnvoi) {
     });
 }
 
-async fn executer_envoi(params: &ParametresEnvoi) -> Result<(), String> {
-    use tokio::io::AsyncReadExt;
-
-    let app = &params.app;
-    let gestionnaire = &params.gestionnaire;
-    let identifiant = &params.identifiant;
-    let chemin = params.chemin.as_path();
-    let ip = params.ip.as_str();
-    let port = params.port;
-    let code = params.code.as_str();
-    let secret = params.secret.as_deref();
-
-    let debut = Instant::now();
-    let manifeste = construire_manifeste(*identifiant, chemin).await?;
-    let total = manifeste.total_bytes;
-
-    // Meme derivation que le receveur : secret de paire s'il existe, sinon
-    // le code d'appairage. `derive_psk_transfert` choisit la meme branche
-    // des deux cotes.
-    let psk = pairing::hex(match secret.and_then(pairing::depuis_hex) {
-        Some(octets) => pairing::derive_psk_bytes(&octets, identifiant.as_bytes()),
-        None => pairing::derive_psk(code, identifiant.as_bytes()),
-    });
-
-    let client = reqwest::Client::builder()
-        .timeout(DELAI_REQUETE)
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| format!("client HTTP : {e}"))?;
+/// Envoie un seul fichier vers le receveur (annonce, morceaux, achèvement).
+/// Cette fonction est appelée soit pour un fichier isolé, soit pour chaque
+/// fichier d'un dossier.
+#[allow(clippy::too_many_arguments)]
+async fn envoyer_fichier_unique(
+    app: &AppHandle,
+    gestionnaire: &Arc<rivaldsend_core::manager::TransferManager>,
+    identifiant: uuid::Uuid,
+    chemin: &Path,
+    ip: &str,
+    port: u16,
+    code: &str,
+    secret: Option<&str>,
+) -> Result<(), String> {
     let base = format!("https://{ip}:{port}");
+    let client = client_tls(DELAI_REQUETE.as_secs())?;
 
-    // 1. Annonce du transfert, avec notre identite pour la reconciliation.
-    let mut annonce = serde_json::json!({
+    // 1. Construire le manifeste de ce fichier.
+    let manifeste = construire_manifeste(identifiant, chemin).await?;
+    let total: u64 = manifeste.total_bytes;
+
+    // 2. Annonce du transfert vers le receveur (POST /v1/transfers).
+    let psk = derive_psk_transfert(secret, code, &identifiant);
+    let manche = serde_json::json!({
         "manifest": manifeste,
+        "code": code,
+        "secret": secret.and_then(pairing::depuis_hex),
         "sender_device_id": crate::commands::device_id(),
         "sender_name": crate::commands::get_device_info().name,
     });
-    if let Some(s) = secret {
-        annonce["secret"] = serde_json::json!(s);
-    } else {
-        annonce["code"] = serde_json::json!(pairing::normaliser(code));
-    }
     let reponse = client
         .post(format!("{base}/v1/transfers"))
-        .json(&annonce)
+        .json(&manche)
         .send()
         .await
-        .map_err(|e| format!("annonce impossible : {e}"))?;
+        .map_err(|e| format!("annonce du transfert impossible : {e}"))?;
     if !reponse.status().is_success() {
         let statut = reponse.status();
         let corps = reponse.text().await.unwrap_or_default();
         return Err(format!("annonce refusée : HTTP {statut} {corps}"));
     }
+    let corps: serde_json::Value = reponse.json().await.map_err(|e| e.to_string())?;
+    let identifiant_serveur = corps["transfer_id"].as_str().unwrap_or("");
+    if !identifiant_serveur.is_empty() && identifiant_serveur != identifiant.to_string() {
+        return Err("l'identifiant de transfert retourné ne correspond pas".into());
+    }
 
-    // 2. Intervalles deja recus cote receveur (reprise apres coupure).
-    //
-    // Avant, on ne lisait que le fichier local, qui n'existe que sur le
-    // receveur : la reprise ne se declenchait donc jamais. On interroge
-    // desormais le receveur, qui est la seule source fiable.
+    // 3. Reprise : demander au receveur quels morceaux il a déjà reçus.
     let mut acquittes: HashSet<(u64, u32)> = HashSet::new();
-    match client
-        .post(format!("{base}/v1/transfers/{identifiant}/resume"))
-        .header("X-PSK", psk.clone())
-        .send()
-        .await
     {
-        Ok(r) if r.status().is_success() => {
-            if let Ok(etat) = r.json::<serde_json::Value>().await {
-                if let Some(tableau) = etat.get("validated_offsets").and_then(|v| v.as_array()) {
-                    for ack in tableau {
-                        if let (Some(offset), Some(taille)) = (
-                            ack.get("offset").and_then(|v| v.as_u64()),
-                            ack.get("size").and_then(|v| v.as_u64()),
-                        ) {
-                            if let Ok(taille) = u32::try_from(taille) {
-                                acquittes.insert((offset, taille));
-                            }
-                        }
+        let r = client
+            .post(format!("{base}/v1/transfers/{identifiant}/resume"))
+            .header("X-PSK", psk.clone())
+            .send()
+            .await;
+        match r {
+            Ok(r) if r.status().is_success() => {
+                let etat: Option<rivaldsend_core::resume::ResumeState> =
+                    r.json().await.ok().flatten();
+                if let Some(etat) = etat {
+                    for ack in etat.validated_offsets {
+                        acquittes.insert((ack.offset, ack.size));
                     }
                 }
             }
-        }
-        Ok(r) => {
-            // Pas d'etat de reprise (transfert frais) : on part de zero.
-            tracing::debug!("pas d'etat de reprise : HTTP {}", r.status());
-        }
-        Err(e) => {
-            tracing::debug!("reprise indisponible ({e}), envoi complet");
+            Ok(r) => {
+                tracing::debug!("pas d'etat de reprise : HTTP {}", r.status());
+            }
+            Err(e) => {
+                tracing::debug!("reprise indisponible ({e}), envoi complet");
+            }
         }
     }
-    // Deja tout recu ? On passe directement a l'achevement.
+    let debut = Instant::now();
     let deja_recus: u64 = acquittes.iter().map(|(_, t)| u64::from(*t)).sum();
     if total > 0 && deja_recus >= total {
         tracing::info!("transfert {identifiant} deja complet cote receveur, achevement direct");
     }
 
-    // 3. Envoi des morceaux.
+    // 4. Envoi des morceaux.
     let mut fichier = tokio::fs::File::open(chemin)
         .await
         .map_err(|e| format!("ouverture impossible : {e}"))?;
     let mut decalage: u64 = 0;
     let mut tampon = vec![0u8; TAILLE_MORCEAU];
     loop {
-        // Annulation / pause demandée depuis l'interface.
-        match gestionnaire.status(identifiant).await {
+        match gestionnaire.status(&identifiant).await {
             Some(rivaldsend_core::manager::TransferStatus::Failed(_)) | None => {
                 return Err("transfert annulé".into())
             }
@@ -261,7 +280,7 @@ async fn executer_envoi(params: &ParametresEnvoi) -> Result<(), String> {
         let morceau = &tampon[..lus];
         if acquittes.contains(&(decalage, lus as u32)) {
             decalage += lus as u64;
-            emettre_progression(app, identifiant, decalage, total, debut, "running", None);
+            emettre_progression(app, &identifiant, decalage, total, debut, "running", None);
             continue;
         }
         let reponse = client
@@ -279,10 +298,10 @@ async fn executer_envoi(params: &ParametresEnvoi) -> Result<(), String> {
             return Err(format!("morceau {decalage} refusé : HTTP {statut} {corps}"));
         }
         decalage += lus as u64;
-        emettre_progression(app, identifiant, decalage, total, debut, "running", None);
+        emettre_progression(app, &identifiant, decalage, total, debut, "running", None);
     }
 
-    // 4. Demande de vérification et de livraison côté receveur.
+    // 5. Demande de vérification et de livraison côté receveur.
     let reponse = client
         .post(format!("{base}/v1/transfers/{identifiant}/complete"))
         .header("X-PSK", psk)
@@ -296,7 +315,62 @@ async fn executer_envoi(params: &ParametresEnvoi) -> Result<(), String> {
         return Err(format!("achèvement refusé : HTTP {statut} {corps}"));
     }
 
-    gestionnaire.marquer_termine(*identifiant).await;
-    emettre_progression(app, identifiant, total, total, debut, "completed", None);
+    gestionnaire.marquer_termine(identifiant).await;
+    emettre_progression(app, &identifiant, total, total, debut, "completed", None);
     Ok(())
+}
+
+async fn executer_envoi(params: &ParametresEnvoi) -> Result<(), String> {
+    let metailles = tokio::fs::metadata(&params.chemin)
+        .await
+        .map_err(|e| format!("metadata impossible : {e}"))?;
+
+    if metailles.is_dir() {
+        // Dossier : envoyer chaque fichier comme un transfert séparé.
+        let fichiers = collecter_fichiers_dossier(&params.chemin);
+        if fichiers.is_empty() {
+            return Err("dossier vide".into());
+        }
+        for fichier in fichiers {
+            let nouvel_id = uuid::Uuid::new_v4();
+            params
+                .gestionnaire
+                .set_pairing_code(nouvel_id, params.code.clone())
+                .await;
+            params.gestionnaire.enqueue(fichier.clone()).await;
+            params
+                .gestionnaire
+                .start_transfer(nouvel_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            if let Err(e) = envoyer_fichier_unique(
+                &params.app,
+                &params.gestionnaire,
+                nouvel_id,
+                &fichier,
+                &params.ip,
+                params.port,
+                &params.code,
+                params.secret.as_deref(),
+            )
+            .await
+            {
+                tracing::warn!("échec envoi {:?}: {}", fichier.display(), e);
+            }
+        }
+        return Ok(());
+    }
+
+    // Fichier unique : déléguer à envoyer_fichier_unique.
+    envoyer_fichier_unique(
+        &params.app,
+        &params.gestionnaire,
+        params.identifiant,
+        &params.chemin,
+        &params.ip,
+        params.port,
+        &params.code,
+        params.secret.as_deref(),
+    )
+    .await
 }

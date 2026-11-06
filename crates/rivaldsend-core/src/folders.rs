@@ -1,7 +1,28 @@
 use crate::error::CoreError;
 use rivaldsend_proto::{FileMode, ManifestEntry};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use unicode_normalization::UnicodeNormalization;
+
+/// Calcule l'empreinte BLAKE3 d'un fichier en lecture par chunks de 64 Ko,
+/// sans charger le fichier entier en memoire. Permet de hasher des fichiers
+/// de plusieurs Go sans risque d'OOM.
+fn hash_file_blake3(path: &Path) -> Result<String, CoreError> {
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| CoreError::IoString(format!("ouverture impossible : {e}")))?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|e| CoreError::IoString(format!("lecture impossible : {e}")))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher.finalize().to_hex().to_string())
+}
 
 pub fn normalize_nfc(s: &str) -> String {
     s.nfc().collect()
@@ -73,8 +94,7 @@ fn collect_recursive(
             let hash = if size == 0 {
                 blake3::hash(b"").to_hex().to_string()
             } else {
-                let bytes = std::fs::read(&path).unwrap_or_default();
-                blake3::hash(&bytes).to_hex().to_string()
+                hash_file_blake3(&path).unwrap_or_else(|_| "0".repeat(64))
             };
             entries.push(ManifestEntry {
                 relative_path: rel_nfc,

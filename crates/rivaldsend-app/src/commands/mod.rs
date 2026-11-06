@@ -123,7 +123,7 @@ pub struct StartTransferResponse {
 /// Contexte : réseau local sans autorité de certification. Le chiffrement TLS
 /// bloque l'écoute passive ; l'authentification passe par la PSK d'appairage
 /// et l'empreinte d'appareil échangée hors bande (QR), pas par le certificat.
-fn client_tls(duree_s: u64) -> Result<reqwest::Client, String> {
+pub(crate) fn client_tls(duree_s: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(duree_s))
         .danger_accept_invalid_certs(true)
@@ -184,13 +184,12 @@ pub async fn start_transfer(
     filePaths: Vec<String>,
     code: Option<String>,
 ) -> Result<StartTransferResponse, String> {
-    // Limite assumée : un seul fichier par transfert (le receveur refuse le reste).
-    if filePaths.len() != 1 {
-        return Err("un seul fichier par transfert dans cette version".into());
-    }
-    let chemin = std::path::PathBuf::from(&filePaths[0]);
-    if !chemin.exists() {
-        return Err(format!("fichier introuvable: {}", filePaths[0]));
+    // Vérifier que tous les chemins existent.
+    let chemins: Vec<std::path::PathBuf> = filePaths.iter().map(std::path::PathBuf::from).collect();
+    for c in &chemins {
+        if !c.exists() {
+            return Err(format!("fichier introuvable: {}", c.display()));
+        }
     }
 
     // Secret de paire si le pair est apparie : aucun code a ressaisir.
@@ -214,51 +213,68 @@ pub async fn start_transfer(
         .await
         .ok_or_else(|| "pair introuvable, reconnectez-vous".to_string())?;
 
-    // Calculer la taille totale réelle
-    let total_bytes: u64 = std::fs::metadata(&chemin).map(|m| m.len()).unwrap_or(0);
+    // Calculer la taille totale réelle (somme de tous les fichiers).
+    let _total_bytes: u64 = chemins
+        .iter()
+        .map(|c| std::fs::metadata(c).map(|m| m.len()).unwrap_or(0))
+        .sum();
 
-    let transfer_id = Uuid::new_v4();
+    let mut premier_id: Option<Uuid> = None;
 
-    // Mémoriser le code et la cible pour le travailleur d'envoi HTTPS.
-    manager.set_pairing_code(transfer_id, code.clone()).await;
+    // Lancer un transfert par fichier (chaque fichier a son propre transfer_id
+    // et son propre travailleur d'envoi HTTPS). Les dossiers sont recus tels
+    // quels : le sender construira un manifeste multi-fichiers si le chemin
+    // est un repertoire.
+    for chemin in &chemins {
+        let transfer_id = Uuid::new_v4();
+        if premier_id.is_none() {
+            premier_id = Some(transfer_id);
+        }
 
-    // Enfiler le fichier pour suivi local
-    let _ = manager.enqueue(chemin.clone()).await;
+        // Memoriser le code et la cible pour le travailleur d'envoi HTTPS.
+        manager.set_pairing_code(transfer_id, code.clone()).await;
 
-    // Associer le peer cible
-    manager.set_target_peer(transfer_id, peerId).await;
+        // Enfiler le fichier pour suivi local.
+        let _ = manager.enqueue(chemin.clone()).await;
 
-    // Démarrer le transfert
-    manager
-        .start_transfer(transfer_id)
-        .await
-        .map_err(|e| e.to_string())?;
+        // Associer le peer cible.
+        manager.set_target_peer(transfer_id, peerId.clone()).await;
 
-    // Lancer le travailleur d'envoi HTTPS (annonce + morceaux + achèvement).
-    crate::sender::spawn_envoi(crate::sender::ParametresEnvoi {
-        app: app.clone(),
-        gestionnaire: manager.inner().clone(),
-        identifiant: transfer_id,
-        chemin,
-        ip,
-        port,
-        code,
-        secret,
-    });
+        // Demarrer le transfert (acquiert un slot de concurrence).
+        manager
+            .start_transfer(transfer_id)
+            .await
+            .map_err(|e| e.to_string())?;
 
-    // Émettre avec total_bytes réel
-    let _ = app.emit(
-        "transfer_progress",
-        crate::events::ProgressEvent {
-            transfer_id: transfer_id.to_string(),
-            bytes_done: 0,
-            total_bytes,
-            speed_bps: 0,
-            eta_secs: 0,
-            status: "running".into(),
-            error: None,
-        },
-    );
+        // Lancer le travailleur d'envoi HTTPS (annonce + morceaux + achèvement).
+        crate::sender::spawn_envoi(crate::sender::ParametresEnvoi {
+            app: app.clone(),
+            gestionnaire: manager.inner().clone(),
+            identifiant: transfer_id,
+            chemin: chemin.clone(),
+            ip: ip.clone(),
+            port,
+            code: code.clone(),
+            secret: secret.clone(),
+        });
+
+        // Emettre la progression pour ce transfert.
+        let taille = std::fs::metadata(chemin).map(|m| m.len()).unwrap_or(0);
+        let _ = app.emit(
+            "transfer_progress",
+            crate::events::ProgressEvent {
+                transfer_id: transfer_id.to_string(),
+                bytes_done: 0,
+                total_bytes: taille,
+                speed_bps: 0,
+                eta_secs: 0,
+                status: "running".into(),
+                error: None,
+            },
+        );
+    }
+
+    let transfer_id = premier_id.expect("au moins un fichier");
     Ok(StartTransferResponse {
         transfer_id: transfer_id.to_string(),
     })
